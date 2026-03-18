@@ -11,6 +11,9 @@ import matplotlib.patches as mpatches
 import shap
 import io
 import tempfile, os
+import yaml
+import streamlit_authenticator as stauth
+from yaml.loader import SafeLoader
 from model import (
     generate_synthetic_ecommerce_data,
     load_olist_data,
@@ -60,6 +63,35 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
+# ─────────────────────────────────────────────
+# AUTHENTICATION
+# ─────────────────────────────────────────────
+with open("auth_config.yaml") as f:
+    auth_cfg = yaml.load(f, Loader=SafeLoader)
+
+authenticator = stauth.Authenticate(
+    auth_cfg["credentials"],
+    auth_cfg["cookie"]["name"],
+    auth_cfg["cookie"]["key"],
+    auth_cfg["cookie"]["expiry_days"],
+)
+
+name, auth_status, username = authenticator.login("🔐 Client Login", "main")
+
+if auth_status is False:
+    st.error("Incorrect username or password.")
+    st.stop()
+elif auth_status is None:
+    st.info("Please enter your credentials to access the dashboard.")
+    st.markdown("**Demo login:** username  / password ")
+    st.stop()
+
+# ── Logged in — show logout in sidebar ──
+with st.sidebar:
+    st.markdown(f"👋 Welcome, **{name}**")
+    authenticator.logout("Logout", "sidebar")
+    st.divider()
 
 # ─────────────────────────────────────────────
 # SESSION STATE — train model once per data source
