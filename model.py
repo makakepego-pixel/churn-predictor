@@ -204,8 +204,11 @@ def load_olist_data(folder: str) -> pd.DataFrame:
     # Drop customers with no orders
     df = df.dropna(subset=["total_orders"]).reset_index(drop=True)
 
-    # ── Churn label: no purchase in last 180 days ──
-    df["churn"] = (df["days_since_last_order"] > 180).astype(int)
+    # ── Churn label: bottom 30% recency = churned (relative to dataset) ──
+    # This avoids the problem of old datasets where everyone looks churned
+    threshold_days = df["days_since_last_order"].quantile(0.70)
+    df["churn"] = (df["days_since_last_order"] > threshold_days).astype(int)
+    print(f"Churn threshold: {threshold_days:.0f} days | Churn rate: {df['churn'].mean():.1%}")
 
     # Rename state column to match schema
     df = df.rename(columns={"customer_state": "customer_state"})
