@@ -11,9 +11,6 @@ import matplotlib.patches as mpatches
 import shap
 import io
 import tempfile, os
-import yaml
-import streamlit_authenticator as stauth
-from yaml.loader import SafeLoader
 from model import (
     generate_synthetic_ecommerce_data,
     load_olist_data,
@@ -116,6 +113,12 @@ with st.sidebar:
     st.image("https://img.icons8.com/fluency/96/graph-report.png", width=60)
     st.title("Churn Predictor")
     st.caption("E-Commerce ML Dashboard")
+    st.divider()
+    st.markdown(f"👋 Welcome, **{st.session_state['client_name']}**")
+    if st.button("🚪 Logout"):
+        st.session_state["logged_in"] = False
+        st.session_state["client_name"] = ""
+        st.rerun()
     st.divider()
 
     st.markdown("### 📂 Data Source")
