@@ -1,0 +1,30 @@
+# ─────────────────────────────────────────────────────────────
+# CLIENT LOGIN CONFIGURATION
+# To add a new client:
+#   1. Run: python hash_password.py  (generates a hashed password)
+#   2. Add their entry below under 'credentials > usernames'
+#   3. Redeploy the app
+# ─────────────────────────────────────────────────────────────
+
+credentials:
+  usernames:
+    # ── Demo client account ──
+    demo_client:
+      email: demo@example.com
+      name: Demo Client
+      # Password: demo123  (change this!)
+      password: "$2b$12$OBNhVRjNVJhMVfEZv0f6/OMGPowv2wjlofFSnFQVOl2r2EMo2/Lka"
+
+    # ── Add your real clients below ──
+    # client1:
+    #   email: client1@theircompany.com
+    #   name: Client One
+    #   password: "<hashed_password_from_hash_password.py>"
+
+cookie:
+  expiry_days: 7
+  key: "churn_predictor_secret_key_change_this"   # ← CHANGE THIS to a random string
+  name: churn_auth_cookie
+
+preauthorized:
+  emails: []
