@@ -394,7 +394,7 @@ with tab4:
     with cb:
         st.markdown("**Mean |SHAP| — Global Feature Impact**")
         fig, ax = plt.subplots(figsize=(6,5), facecolor="#1e1e2e")
-        ax.set_facecolor("#1e1e2e")
+        ax.set_facecolor("#3f3f61")
         ms = np.abs(shap_vals).mean(axis=0)
         o = np.argsort(ms)
         ax.barh(np.array(FEATURE_COLS)[o], ms[o], color=plt.cm.RdPu(np.linspace(0.3, 0.9, len(FEATURE_COLS))))
@@ -425,7 +425,7 @@ with tab4:
         show=False
     )
     fig = plt.gcf()
-    fig.set_facecolor("#1e1e2e")
+    fig.set_facecolor("#3f3f61")
     st.pyplot(fig)
     plt.close(fig)
 
