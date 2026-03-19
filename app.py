@@ -14,6 +14,7 @@ from model import (
     load_olist_data,
     train_model,
     predict_churn,
+    auto_convert_csv,
     FEATURE_COLS,
 )
 
@@ -38,10 +39,19 @@ DEFAULT_USERS = {
 }
 
 def load_users():
+    users = DEFAULT_USERS.copy()
     if os.path.exists(USERS_FILE):
-        with open(USERS_FILE) as f:
-            return json.load(f)
-    return DEFAULT_USERS.copy()
+        try:
+            with open(USERS_FILE) as f:
+                users.update(json.load(f))
+        except Exception:
+            pass
+    try:
+        from clients import load_all_clients
+        users.update(load_all_clients())
+    except Exception:
+        pass
+    return users
 
 def save_users(u):
     with open(USERS_FILE, "w") as f:
@@ -166,7 +176,12 @@ with tab1:
         st.warning(f"Please upload all 5 Olist CSV files ({len(olist_files)}/5 uploaded)."); df_pred = df_full.drop(columns=["churn"], errors="ignore")
     elif data_source == "Upload single CSV" and uploaded_file:
         try:
-            uploaded_file.seek(0); df_pred = pd.read_csv(uploaded_file); st.success(f"Loaded {len(df_pred):,} customers.")
+            uploaded_file.seek(0)
+            df_raw  = pd.read_csv(uploaded_file)
+            df_pred = auto_convert_csv(df_raw)
+            fmt = "Telco-style" if "tenure" in df_raw.columns else "Custom"
+            st.success(f"Loaded {len(df_pred):,} customers from your file.")
+            st.info(f"📋 Detected **{fmt}** CSV — columns mapped automatically.")
         except Exception as e:
             st.error(f"Error: {e}"); df_pred = df_full.drop(columns=["churn"], errors="ignore")
     else:
