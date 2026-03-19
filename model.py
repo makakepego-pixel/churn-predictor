@@ -221,6 +221,124 @@ def load_olist_data(folder: str) -> pd.DataFrame:
     return df
 
 
+
+# ─────────────────────────────────────────────
+# AUTO-CONVERTER: Telco / generic CSV → model schema
+# ─────────────────────────────────────────────
+
+def convert_telco_csv(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Maps a Telco-style churn CSV to the e-commerce model schema.
+    Works with Kaggle Telco Customer Churn dataset and similar formats.
+    """
+    df = df.copy()
+
+    # Normalise column names
+    df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+
+    out = pd.DataFrame()
+
+    # customer_id
+    if "customerid" in df.columns:
+        out["customer_id"] = df["customerid"]
+    elif "id" in df.columns:
+        out["customer_id"] = df["id"].astype(str)
+    else:
+        out["customer_id"] = [f"C{i:05d}" for i in range(len(df))]
+
+    # total_orders ← tenure (months = orders proxy)
+    out["total_orders"] = pd.to_numeric(df.get("tenure", pd.Series([1]*len(df))), errors="coerce").fillna(1).clip(lower=1)
+
+    # avg_order_value + total_spend ← monthly/total charges
+    monthly = pd.to_numeric(df.get("monthlycharges", pd.Series([50]*len(df))), errors="coerce").fillna(50)
+    total   = pd.to_numeric(df.get("totalcharges",   pd.Series([50]*len(df))), errors="coerce").fillna(monthly)
+    out["avg_order_value"] = monthly
+    out["total_spend"]     = total
+
+    # days_since_last_order — low tenure = recent, high = long ago
+    max_tenure = out["total_orders"].max()
+    out["days_since_last_order"] = ((max_tenure - out["total_orders"]) * 30 / max_tenure * 180 + 1).astype(int)
+
+    # days_as_customer
+    out["days_as_customer"] = (out["total_orders"] * 30).astype(int)
+
+    # num_reviews ← avg_review_score proxy (no reviews in telco)
+    out["num_reviews"]      = 0
+    out["avg_review_score"] = 3.5
+
+    # num_categories ← number of services subscribed
+    service_cols = ["phoneservice", "multiplelines", "internetservice",
+                    "onlinesecurity", "onlinebackup", "deviceprotection",
+                    "techsupport", "streamingtv", "streamingmovies"]
+    def count_services(row):
+        count = 0
+        for col in service_cols:
+            if col in row.index:
+                val = str(row[col]).lower()
+                if val not in ["no", "no phone service", "no internet service", "nan"]:
+                    count += 1
+        return max(count, 1)
+    out["num_categories"] = df.apply(count_services, axis=1)
+
+    # used_voucher ← paperlessbilling as proxy
+    if "paperlessbilling" in df.columns:
+        out["used_voucher"] = (df["paperlessbilling"].str.lower() == "yes").astype(int)
+    else:
+        out["used_voucher"] = 0
+
+    # payment_type
+    if "paymentmethod" in df.columns:
+        out["payment_type"] = df["paymentmethod"].str.lower().str.replace(" ", "_").str.replace("(", "").str.replace(")", "")
+    else:
+        out["payment_type"] = "credit_card"
+
+    # customer_state ← contract type as region proxy
+    if "contract" in df.columns:
+        out["customer_state"] = df["contract"].str.lower().str.replace("-", "_").str.replace(" ", "_")
+    else:
+        out["customer_state"] = "unknown"
+
+    # support_tickets ← SeniorCitizen as higher-support proxy
+    if "seniorcitizen" in df.columns:
+        out["support_tickets"] = pd.to_numeric(df["seniorcitizen"], errors="coerce").fillna(0).astype(int)
+    else:
+        out["support_tickets"] = 0
+
+    # late_deliveries — not applicable for telco
+    out["late_deliveries"] = 0
+
+    # churn label (if present)
+    if "churn" in df.columns:
+        churn_raw = df["churn"].astype(str).str.lower()
+        out["churn"] = churn_raw.map({"yes": 1, "true": 1, "1": 1, "no": 0, "false": 0, "0": 0}).fillna(0).astype(int)
+
+    return out
+
+
+def auto_convert_csv(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Detects CSV type and converts to model schema if needed.
+    Returns original df if it already has the right columns.
+    """
+    required = {"total_orders", "avg_order_value", "days_since_last_order",
+                "total_spend", "days_as_customer", "payment_type", "customer_state"}
+
+    cols_lower = set(c.lower() for c in df.columns)
+
+    if required.issubset(set(df.columns)):
+        return df  # already correct schema
+
+    # Detect Telco dataset
+    telco_signals = {"tenure", "monthlycharges", "totalcharges", "contract", "internetservice"}
+    if len(telco_signals.intersection(cols_lower)) >= 3:
+        print("Detected Telco-style CSV — converting schema …")
+        return convert_telco_csv(df)
+
+    # Generic fallback: try to map by column name similarity
+    print("Unknown CSV format — attempting generic conversion …")
+    return convert_telco_csv(df)  # best-effort
+
+
 # ─────────────────────────────────────────────
 # 3.  FEATURE ENGINEERING
 # ─────────────────────────────────────────────
