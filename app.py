@@ -28,6 +28,15 @@ html, body, [class*="css"] { font-family: 'Space Grotesk', sans-serif; }
 .metric-value { font-size:2rem; font-weight:700; color:#7c6af7; }
 .metric-label { font-size:0.85rem; color:#aaa; margin-top:4px; }
 .section-header { font-size:1.3rem; font-weight:700; margin:24px 0 12px; padding-bottom:6px; border-bottom:2px solid #7c6af7; color:#e0e0e0; }
+
+/* ── Hide Streamlit internal tooltips and autocomplete overlays ── */
+.stTooltipIcon { display: none !important; }
+[data-testid="tooltipHoverTarget"] { display: none !important; }
+.stMarkdown pre { display: none !important; }
+div[class*="tooltip"] { display: none !important; }
+.streamlit-expanderContent pre { display: none !important; }
+section[data-testid="stSidebar"] pre { display: none !important; }
+.main pre:not(.stCodeBlock pre) { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
