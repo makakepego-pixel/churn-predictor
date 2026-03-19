@@ -408,7 +408,7 @@ with tab4:
         st.markdown("**SHAP Summary — Impact Direction**")
         shap.summary_plot(shap_vals, X_test, plot_type="dot", show=False, color_bar=True)
         fig = plt.gcf()
-        fig.set_facecolor("#1e1e2e")
+        fig.set_facecolor("#3f3f61")
         st.pyplot(fig)
         plt.close(fig)
 
