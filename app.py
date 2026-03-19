@@ -203,13 +203,15 @@ with tab1:
         ax.hist(results["churn_probability"], bins=40, color="#7c6af7", edgecolor="#1e1e2e", alpha=0.9)
         ax.axvline(threshold, color="#ff6b6b", linestyle="--", lw=1.5, label=f"Threshold ({threshold})")
         ax.set_xlabel("Churn Probability", color="white",fontsize=10); ax.set_ylabel("# Customers", color="white",fontsize=10)
-        ax.tick_params(colors="white"); [s.set_edgecolor("#3a3a5c") for s in ax.spines.values()]
+        ax.tick_params(colors="white")
+        for s in ax.spines.values(): s.set_edgecolor("#3a3a5c")
         ax.legend(facecolor="#2a2a3e",labelcolor="white",fontsize=9); st.pyplot(fig); plt.close()
     with cp:
         st.markdown('<div class="section-header">Risk Segment Breakdown</div>', unsafe_allow_html=True)
         fig2,ax2 = plt.subplots(figsize=(4,3), facecolor="#1e1e2e"); ax2.set_facecolor("#1e1e2e")
         _,_,autos = ax2.pie([high,medium,low],labels=["High","Medium","Low"],colors=["#ff6b6b","#ffd93d","#6bcb77"],autopct="%1.1f%%",startangle=140,textprops={"color":"white","fontsize":10})
-        [a.set_color("black") for a in autos]; st.pyplot(fig2); plt.close()
+        for a in autos: a.set_color("black")
+        st.pyplot(fig2); plt.close()
 
 with tab2:
     st.markdown('<div class="section-header">Customer Risk Scores</div>', unsafe_allow_html=True)
@@ -243,7 +245,8 @@ with tab3:
         ax.set_xticks([0,1]); ax.set_yticks([0,1])
         ax.set_xticklabels(["No Churn","Churn"],color="white"); ax.set_yticklabels(["No Churn","Churn"],color="white")
         ax.set_xlabel("Predicted",color="white"); ax.set_ylabel("Actual",color="white")
-        [ax.text(j,i,str(cmat[i,j]),ha="center",va="center",color="white",fontsize=18,fontweight="bold") for i in range(2) for j in range(2)]
+        for i in range(2):
+            for j in range(2): ax.text(j,i,str(cmat[i,j]),ha="center",va="center",color="white",fontsize=18,fontweight="bold")
         plt.colorbar(im,ax=ax); st.pyplot(fig); plt.close()
 
 with tab4:
@@ -256,7 +259,8 @@ with tab4:
         ms = np.abs(shap_vals).mean(axis=0); o = np.argsort(ms)
         ax.barh(np.array(FEATURE_COLS)[o],ms[o],color=plt.cm.RdPu(np.linspace(0.3,0.9,len(FEATURE_COLS))))
         ax.tick_params(colors="white",labelsize=8); ax.set_xlabel("Mean |SHAP value|",color="white")
-        [s.set_edgecolor("#3a3a5c") for s in ax.spines.values()]; st.pyplot(fig); plt.close()
+        for s in ax.spines.values(): s.set_edgecolor("#3a3a5c")
+        st.pyplot(fig); plt.close()
     with cs:
         st.markdown("**SHAP Summary — Impact Direction**")
         shap.summary_plot(shap_vals,X_test,plot_type="dot",show=False,color_bar=True)
