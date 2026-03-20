@@ -1,6 +1,5 @@
 """
 Front-Tech — Complete Webhook Server (PayPal + Gmail)
-Handles: User signup, PayPal IPN, User login, Email delivery
 """
 
 import os
@@ -37,25 +36,42 @@ PLAN_PRICES = {
     "Enterprise": "299.00"
 }
 
-# ========== FILE PATH HELPERS ==========
+# ========== FIND LANDING PAGE ==========
 
-def get_landing_path():
-    """Find the correct path to landing folder"""
-    # Check common locations
-    possible_paths = [
-        '../landing',      # When running from webhook_server folder
-        'landing',         # When running from root
-        '.',               # When files are in root
+def find_landing_page():
+    """Find the correct path to landing page"""
+    import os
+    
+    # Get current directory
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Check possible locations
+    locations_to_check = [
+        os.path.join(current_dir, 'landing'),
+        os.path.join(os.path.dirname(current_dir), 'landing'),
+        'landing',
+        '../landing',
+        '.',
+        '..',
     ]
     
-    for path in possible_paths:
-        if os.path.exists(os.path.join(path, 'index.HTML')):
-            return path
+    for location in locations_to_check:
+        try:
+            if os.path.exists(location):
+                # Check for any index.html file (case insensitive)
+                for file in os.listdir(location):
+                    if file.lower() == 'index.html' or file.lower() == 'index.htm':
+                        print(f"[DEBUG] Found landing page: {location}/{file}")
+                        return location, file
+        except:
+            pass
     
-    return '../landing'  # Default
+    print("[DEBUG] Could not find landing page")
+    return None, None
 
-LANDING_PATH = get_landing_path()
+LANDING_PATH, INDEX_FILE = find_landing_page()
 print(f"📁 Landing page path: {LANDING_PATH}")
+print(f"📄 Index file: {INDEX_FILE}")
 
 # ========== HELPER FUNCTIONS ==========
 
@@ -141,15 +157,20 @@ def provision_client(name, email, plan, amount=""):
 @app.route('/')
 def serve_landing():
     """Serve the landing page"""
+    if not LANDING_PATH or not INDEX_FILE:
+        return jsonify({"error": "Landing page not found in repository"}), 404
+    
     try:
-        return send_from_directory(LANDING_PATH, 'index.HTML')
+        return send_from_directory(LANDING_PATH, INDEX_FILE)
     except Exception as e:
         print(f"[ERROR] Cannot serve landing page: {e}")
-        return jsonify({"error": "Landing page not found", "path": LANDING_PATH}), 404
+        return jsonify({"error": str(e)}), 404
 
 @app.route('/landing/<path:filename>')
 def serve_landing_files(filename):
     """Serve static files if needed"""
+    if not LANDING_PATH:
+        return jsonify({"error": "Landing page path not found"}), 404
     try:
         return send_from_directory(LANDING_PATH, filename)
     except Exception as e:
@@ -161,6 +182,7 @@ def health():
         "status": "ok",
         "clients": len(load_clients()),
         "landing_path": LANDING_PATH,
+        "index_file": INDEX_FILE,
         "time": datetime.now().isoformat()
     })
 
@@ -179,18 +201,15 @@ def api_signup():
 
     price = PLAN_PRICES.get(plan)
 
-    # Check if user already exists
     clients = load_clients()
     for username, info in clients.items():
         if info.get('email') == email:
             if info.get('status') == 'active':
                 return jsonify({"error": "Email already registered. Please login."}), 400
             elif info.get('status') == 'pending':
-                # Resend payment link
                 paypal_url = f"https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business={PAYPAL_EMAIL}&item_name={plan} Plan&amount={price}&currency_code=USD&notify_url={request.host_url}paypal-ipn&return_url={request.host_url}?payment=success"
                 return jsonify({"payment_url": paypal_url})
 
-    # Create pending user
     username = make_username(name, email)
     temp_password = generate_password()
 
@@ -230,10 +249,6 @@ def api_login():
                 })
 
     return jsonify({"error": "Invalid email or password"}), 401
-
-@app.route('/api/status', methods=['GET'])
-def api_status():
-    return jsonify({"status": "ok", "message": "Front-Tech API is running"})
 
 # ========== PAYPAL WEBHOOK ==========
 
@@ -294,8 +309,6 @@ def paypal_ipn():
 
     return "OK", 200
 
-# ========== ADMIN ROUTES ==========
-
 @app.route("/clients")
 def list_clients():
     if request.args.get("secret") != SECRET_KEY:
@@ -305,24 +318,11 @@ def list_clients():
                     for u, v in clients.items()}
     return jsonify({"count": len(clients), "clients": safe_clients})
 
-@app.route("/notify", methods=["POST"])
-def manual_notify():
-    data = request.get_json() or {}
-    if data.get("secret") != SECRET_KEY:
-        return jsonify({"error": "Unauthorized"}), 401
-    name = data.get("name", "")
-    email = data.get("email", "")
-    plan = data.get("plan", "Pro")
-    amount = data.get("amount", "")
-    if not name or not email:
-        return jsonify({"error": "name and email required"}), 400
-    u, p = provision_client(name, email, plan, amount)
-    return jsonify({"status": "provisioned", "username": u})
-
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
     print(f"🚀 Front-Tech server running on port {port}")
     print(f"📁 Landing page path: {LANDING_PATH}")
+    print(f"📄 Index file: {INDEX_FILE}")
     print(f"📁 Clients file: {CLIENTS_FILE}")
     print(f"📧 Email: {'✅ ENABLED' if SMTP_USER and SMTP_PASS else '❌ DISABLED'}")
     app.run(host="0.0.0.0", port=port, debug=False)
