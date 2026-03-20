@@ -80,6 +80,7 @@
     padding: 10px 22px; border-radius: 8px;
     font-weight: 500; font-size: 0.9rem;
     transition: opacity 0.2s, transform 0.2s;
+    cursor: pointer;
   }
   .nav-cta:hover { opacity: 0.85; transform: translateY(-1px); }
 
@@ -147,6 +148,8 @@
     text-decoration: none;
     transition: transform 0.2s, box-shadow 0.2s;
     box-shadow: 0 0 30px rgba(0,229,160,0.3);
+    display: inline-block;
+    cursor: pointer;
   }
   .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 50px rgba(0,229,160,0.4); }
   .btn-ghost {
@@ -157,6 +160,8 @@
     text-decoration: none;
     border: 1px solid var(--border);
     transition: border-color 0.2s, background 0.2s;
+    display: inline-block;
+    cursor: pointer;
   }
   .btn-ghost:hover { border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.04); }
 
@@ -341,6 +346,7 @@
     font-weight: 500; font-size: 0.95rem;
     text-decoration: none;
     transition: all 0.2s;
+    cursor: pointer;
   }
   .plan-btn-primary {
     background: var(--accent); color: #050810;
@@ -351,6 +357,68 @@
     border: 1px solid var(--border); color: var(--text);
   }
   .plan-btn-ghost:hover { border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.04); }
+
+  /* ── Modal ── */
+  .modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.8);
+    backdrop-filter: blur(8px);
+  }
+  .modal-content {
+    background: var(--surface);
+    margin: 15% auto;
+    padding: 32px;
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+  }
+  .modal-content h2 {
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+  }
+  .modal-content input {
+    width: 100%;
+    padding: 12px;
+    margin: 8px 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+  }
+  .modal-content button {
+    background: var(--accent);
+    color: #050810;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 16px;
+    width: 100%;
+  }
+  .modal-content button:hover { opacity: 0.85; }
+  .modal-content a {
+    color: var(--accent);
+    text-decoration: none;
+    display: block;
+    margin-top: 16px;
+  }
+  .close {
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .close:hover { color: var(--text); }
 
   /* ── Testimonial ── */
   .social-proof {
@@ -511,63 +579,17 @@
     <a href="#how">How it works</a>
     <a href="#pricing">Pricing</a>
   </div>
-  <a href="#pricing" class="nav-cta">Get Started</a>
+  <div class="nav-cta">Get Started</div>
 </nav>
-<script>
-// API Configuration
-const API_URL = 'https://impartial-emotion.up.railway.app';
 
-// Signup function
-async function signup(name, email, plan) {
-    const response = await fetch(`${API_URL}/api/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, plan })
-    });
-    const data = await response.json();
-    
-    if (data.payment_url) {
-        window.location.href = data.payment_url;
-    } else {
-        alert(data.error || 'Something went wrong');
-    }
-}
-
-// Login function
-async function login(email, password) {
-    const response = await fetch(`${API_URL}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-    });
-    const data = await response.json();
-    
-    if (data.dashboard_url) {
-        window.location.href = data.dashboard_url;
-    } else {
-        alert(data.error || 'Invalid credentials');
-    }
-}
-
-// Connect buttons to functions
-document.getElementById('starter-btn')?.addEventListener('click', () => {
-    signup(
-        prompt('Your name:'),
-        prompt('Your email:'),
-        'Starter'
-    );
-});
-
-// ... similar for Pro and Enterprise buttons
-</script>
 <!-- HERO -->
 <section class="hero">
   <div class="hero-badge">Powered by XGBoost + SHAP AI</div>
   <h1>Know which customers will leave <em>before</em> they do</h1>
   <p class="hero-sub">Front-Tech's Churn Predictor uses machine learning to flag at-risk customers with up to 87% accuracy — so you can act before revenue walks out the door.</p>
   <div class="hero-actions">
-    <a href="#pricing" class="btn-primary">Start Free Trial</a>
-    <a href="YOUR_STREAMLIT_URL" target="_blank" class="btn-ghost">View Live Demo →</a>
+    <div class="btn-primary" id="freeTrialBtn">Start Free Trial</div>
+    <div class="btn-ghost" id="demoBtn">View Live Demo →</div>
   </div>
 
   <!-- Dashboard mockup -->
@@ -710,7 +732,7 @@ document.getElementById('starter-btn')?.addEventListener('click', () => {
         <li>1 user login</li>
         <li>Email support</li>
       </ul>
-      <a href="https://paypal.me/frontech/49" target="_blank" class="plan-btn plan-btn-ghost">Get Starter</a>
+      <div class="plan-btn plan-btn-ghost" data-plan="Starter">Get Starter</div>
     </div>
 
     <!-- Pro (featured) -->
@@ -728,7 +750,7 @@ document.getElementById('starter-btn')?.addEventListener('click', () => {
         <li>3 user logins</li>
         <li>Priority support</li>
       </ul>
-      <a href="https://paypal.me/frontech/149" target="_blank" class="plan-btn plan-btn-primary">Get Pro</a>
+      <div class="plan-btn plan-btn-primary" data-plan="Pro">Get Pro</div>
     </div>
 
     <!-- Enterprise -->
@@ -745,7 +767,7 @@ document.getElementById('starter-btn')?.addEventListener('click', () => {
         <li>Custom branding option</li>
         <li>SLA guarantee</li>
       </ul>
-      <a href="https://paypal.me/frontech/299" target="_blank" class="plan-btn plan-btn-ghost">Get Enterprise</a>
+      <div class="plan-btn plan-btn-ghost" data-plan="Enterprise">Get Enterprise</div>
     </div>
 
   </div>
@@ -781,7 +803,7 @@ document.getElementById('starter-btn')?.addEventListener('click', () => {
   <div class="reveal">
     <h2>Ready to stop losing customers?</h2>
     <p>Join businesses using Front-Tech to predict and prevent churn before it happens.</p>
-    <a href="#pricing" class="btn-primary">Start your free trial →</a>
+    <div class="btn-primary" id="ctaBtn">Start your free trial →</div>
   </div>
 </section>
 
@@ -791,15 +813,161 @@ document.getElementById('starter-btn')?.addEventListener('click', () => {
   <div>© 2025 Front-Tech. All rights reserved.</div>
   <div style="display:flex;gap:24px">
     <a href="mailto:hello@front-tech.io" style="color:var(--muted);text-decoration:none">hello@front-tech.io</a>
+    <a href="#" id="loginLink" style="color:var(--muted);text-decoration:none">Login</a>
   </div>
 </footer>
 
+<!-- MODALS -->
+<div id="signupModal" class="modal">
+  <div class="modal-content">
+    <span class="close">&times;</span>
+    <h2>Create Your Account</h2>
+    <input type="text" id="signupName" placeholder="Full Name" required>
+    <input type="email" id="signupEmail" placeholder="Email" required>
+    <input type="hidden" id="signupPlan" value="Starter">
+    <button id="signupSubmit">Continue to Payment</button>
+    <a href="#" id="switchToLogin">Already have an account? Login</a>
+  </div>
+</div>
+
+<div id="loginModal" class="modal">
+  <div class="modal-content">
+    <span class="close">&times;</span>
+    <h2>Login to Your Account</h2>
+    <input type="email" id="loginEmail" placeholder="Email" required>
+    <input type="password" id="loginPassword" placeholder="Password" required>
+    <button id="loginSubmit">Login</button>
+    <a href="#" id="switchToSignup">Don't have an account? Sign Up</a>
+  </div>
+</div>
+
 <script>
-  // Scroll reveal
-  const observer = new IntersectionObserver(entries => {
+// API Configuration
+const API_URL = window.location.origin;
+
+// Signup function
+async function signup(name, email, plan) {
+    const response = await fetch(`${API_URL}/api/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, plan })
+    });
+    const data = await response.json();
+    
+    if (data.payment_url) {
+        window.location.href = data.payment_url;
+    } else {
+        alert(data.error || 'Something went wrong');
+    }
+}
+
+// Login function
+async function login(email, password) {
+    const response = await fetch(`${API_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+    });
+    const data = await response.json();
+    
+    if (data.dashboard_url) {
+        window.location.href = data.dashboard_url;
+    } else {
+        alert(data.error || 'Invalid credentials');
+    }
+}
+
+// Demo function
+function viewDemo() {
+    window.open('YOUR_STREAMLIT_URL?demo=true', '_blank');
+}
+
+// Modal handling
+const signupModal = document.getElementById('signupModal');
+const loginModal = document.getElementById('loginModal');
+
+function openSignupModal(plan = 'Starter') {
+    document.getElementById('signupPlan').value = plan;
+    signupModal.style.display = 'block';
+}
+
+function openLoginModal() {
+    loginModal.style.display = 'block';
+}
+
+function closeModals() {
+    signupModal.style.display = 'none';
+    loginModal.style.display = 'none';
+}
+
+// Event Listeners
+document.querySelectorAll('.plan-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const plan = btn.getAttribute('data-plan');
+        openSignupModal(plan);
+    });
+});
+
+document.getElementById('freeTrialBtn')?.addEventListener('click', () => openSignupModal('Starter'));
+document.getElementById('ctaBtn')?.addEventListener('click', () => openSignupModal('Starter'));
+document.querySelector('.nav-cta')?.addEventListener('click', () => openSignupModal('Starter'));
+document.getElementById('demoBtn')?.addEventListener('click', viewDemo);
+document.getElementById('loginLink')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openLoginModal();
+});
+
+// Modal buttons
+document.getElementById('signupSubmit')?.addEventListener('click', () => {
+    const name = document.getElementById('signupName').value;
+    const email = document.getElementById('signupEmail').value;
+    const plan = document.getElementById('signupPlan').value;
+    if (name && email) {
+        signup(name, email, plan);
+        closeModals();
+    } else {
+        alert('Please fill in all fields');
+    }
+});
+
+document.getElementById('loginSubmit')?.addEventListener('click', () => {
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+    if (email && password) {
+        login(email, password);
+        closeModals();
+    } else {
+        alert('Please fill in all fields');
+    }
+});
+
+document.getElementById('switchToLogin')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeModals();
+    openLoginModal();
+});
+
+document.getElementById('switchToSignup')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeModals();
+    openSignupModal();
+});
+
+// Close modals when clicking X or outside
+document.querySelectorAll('.close').forEach(el => {
+    el.addEventListener('click', closeModals);
+});
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        closeModals();
+    }
+}
+
+// Scroll reveal
+const observer = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
-  }, { threshold: 0.1 });
-  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 </script>
 </body>
 </html>
