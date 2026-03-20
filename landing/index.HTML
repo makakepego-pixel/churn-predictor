@@ -513,7 +513,53 @@
   </div>
   <a href="#pricing" class="nav-cta">Get Started</a>
 </nav>
+<script>
+// API Configuration
+const API_URL = 'https://impartial-emotion.up.railway.app';
 
+// Signup function
+async function signup(name, email, plan) {
+    const response = await fetch(`${API_URL}/api/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, plan })
+    });
+    const data = await response.json();
+    
+    if (data.payment_url) {
+        window.location.href = data.payment_url;
+    } else {
+        alert(data.error || 'Something went wrong');
+    }
+}
+
+// Login function
+async function login(email, password) {
+    const response = await fetch(`${API_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+    });
+    const data = await response.json();
+    
+    if (data.dashboard_url) {
+        window.location.href = data.dashboard_url;
+    } else {
+        alert(data.error || 'Invalid credentials');
+    }
+}
+
+// Connect buttons to functions
+document.getElementById('starter-btn')?.addEventListener('click', () => {
+    signup(
+        prompt('Your name:'),
+        prompt('Your email:'),
+        'Starter'
+    );
+});
+
+// ... similar for Pro and Enterprise buttons
+</script>
 <!-- HERO -->
 <section class="hero">
   <div class="hero-badge">Powered by XGBoost + SHAP AI</div>
