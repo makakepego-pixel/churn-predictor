@@ -384,6 +384,10 @@
     font-size: 1.5rem;
     margin-bottom: 8px;
   }
+  .modal-content p {
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
   .modal-content input {
     width: 100%;
     padding: 12px;
@@ -900,6 +904,19 @@
   </div>
 </div>
 
+<!-- DEMO MODAL -->
+<div id="demoModal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeDemoModal()">&times;</span>
+    <h2>Try Front-Tech Demo</h2>
+    <p>Get instant access to a live demo with sample data</p>
+    <input type="text" id="demoName" placeholder="Your Name" required>
+    <input type="email" id="demoEmail" placeholder="Your Email" required>
+    <button onclick="requestDemo()">Start Free Demo</button>
+    <p style="margin-top:16px; font-size:0.8rem;">No credit card required. Demo expires in 7 days.</p>
+  </div>
+</div>
+
 <!-- PAYMENT OPTIONS MODAL -->
 <div id="paymentModal" class="modal">
   <div class="modal-content">
@@ -956,7 +973,6 @@
 <script>
 // API Configuration
 const API_URL = window.location.origin;
-const IS_TEST_MODE = true;  // Set to false for production
 
 // Payment state
 let currentPlan = '';
@@ -980,7 +996,7 @@ async function signup(name, email, plan, paymentMethod) {
             window.location.href = data.payment_url;
         } else if (data.message) {
             alert(data.message);
-            closeModals();
+            closeAllModals();
         } else {
             alert(data.error || 'Something went wrong');
         }
@@ -1010,6 +1026,35 @@ async function login(email, password) {
     }
 }
 
+async function requestDemo() {
+    const name = document.getElementById('demoName').value;
+    const email = document.getElementById('demoEmail').value;
+    
+    if (!name || !email) {
+        alert('Please enter your name and email');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_URL}/api/demo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('Demo access granted! Check your email for login credentials.');
+            closeDemoModal();
+        } else {
+            alert(data.error || 'Something went wrong');
+        }
+    } catch (error) {
+        console.error('Demo error:', error);
+        alert('Network error. Please try again.');
+    }
+}
+
 async function requestBankTransfer(name, email, plan, phone) {
     try {
         const response = await fetch(`${API_URL}/api/request-bank-transfer`, {
@@ -1019,7 +1064,7 @@ async function requestBankTransfer(name, email, plan, phone) {
         });
         const data = await response.json();
         alert(data.message || 'Bank transfer details have been sent to your email.');
-        closeModals();
+        closeAllModals();
     } catch (error) {
         console.error('Bank transfer request error:', error);
         alert('Error requesting bank transfer. Please contact support.');
@@ -1111,10 +1156,20 @@ function openLoginModal() {
     loginModal.style.display = 'block';
 }
 
-function closeModals() {
+function openDemoModal() {
+    document.getElementById('demoModal').style.display = 'block';
+}
+
+function closeDemoModal() {
+    const modal = document.getElementById('demoModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function closeAllModals() {
     signupModal.style.display = 'none';
     loginModal.style.display = 'none';
     paymentModal.style.display = 'none';
+    closeDemoModal();
     // Reset payment state
     currentPlan = '';
     currentPrice = 0;
@@ -1140,10 +1195,7 @@ document.getElementById('ctaBtn')?.addEventListener('click', () => openSignupMod
 document.querySelector('.nav-cta')?.addEventListener('click', () => openSignupModal('Starter', 49));
 
 // Demo button
-document.getElementById('demoBtn')?.addEventListener('click', () => {
-    const streamlitUrl = 'YOUR_STREAMLIT_URL';
-    window.open(`${streamlitUrl}?demo=true`, '_blank');
-});
+document.getElementById('demoBtn')?.addEventListener('click', openDemoModal);
 
 // Login link
 document.getElementById('loginLink')?.addEventListener('click', (e) => {
@@ -1162,7 +1214,7 @@ document.getElementById('signupSubmit')?.addEventListener('click', () => {
         currentName = name;
         currentEmail = email;
         showPaymentOptions(plan, price);
-        closeModals();
+        closeAllModals();
     } else {
         alert('Please fill in all fields');
     }
@@ -1174,7 +1226,7 @@ document.getElementById('loginSubmit')?.addEventListener('click', () => {
     const password = document.getElementById('loginPassword').value;
     if (email && password) {
         login(email, password);
-        closeModals();
+        closeAllModals();
     } else {
         alert('Please fill in all fields');
     }
@@ -1199,24 +1251,24 @@ document.getElementById('confirmPaymentBtn')?.addEventListener('click', () => {
 // Modal switching
 document.getElementById('switchToLogin')?.addEventListener('click', (e) => {
     e.preventDefault();
-    closeModals();
+    closeAllModals();
     openLoginModal();
 });
 
 document.getElementById('switchToSignup')?.addEventListener('click', (e) => {
     e.preventDefault();
-    closeModals();
+    closeAllModals();
     openSignupModal();
 });
 
-// Close modals
+// Close modals when clicking X or outside
 document.querySelectorAll('.close').forEach(el => {
-    el.addEventListener('click', closeModals);
+    el.addEventListener('click', closeAllModals);
 });
 
 window.onclick = function(event) {
     if (event.target.classList.contains('modal')) {
-        closeModals();
+        closeAllModals();
     }
 }
 
@@ -1226,7 +1278,7 @@ const observer = new IntersectionObserver(entries => {
 }, { threshold: 0.1 });
 document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
-console.log('Front-Tech ready!');
+console.log('Front-Tech ready! API URL:', API_URL);
 </script>
 </body>
 </html>
