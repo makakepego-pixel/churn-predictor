@@ -372,17 +372,17 @@
   }
   .modal-content {
     background: var(--surface);
-    margin: 15% auto;
+    margin: 10% auto;
     padding: 32px;
     border: 1px solid var(--border);
     border-radius: 24px;
     width: 90%;
-    max-width: 400px;
+    max-width: 500px;
     text-align: center;
   }
   .modal-content h2 {
     font-size: 1.5rem;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
   }
   .modal-content input {
     width: 100%;
@@ -405,6 +405,10 @@
     width: 100%;
   }
   .modal-content button:hover { opacity: 0.85; }
+  .modal-content button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
   .modal-content a {
     color: var(--accent);
     text-decoration: none;
@@ -419,6 +423,58 @@
     color: var(--muted);
   }
   .close:hover { color: var(--text); }
+
+  /* Payment Options */
+  .payment-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 24px;
+  }
+  .payment-option {
+    display: flex;
+    align-items: center;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .payment-option:hover {
+    border-color: var(--accent);
+    background: var(--surface2);
+  }
+  .payment-option.selected {
+    border-color: var(--accent);
+    background: rgba(0,229,160,0.1);
+  }
+  .payment-icon {
+    font-size: 28px;
+    margin-right: 16px;
+  }
+  .payment-details {
+    flex: 1;
+    text-align: left;
+  }
+  .payment-details h3 {
+    margin: 0 0 4px 0;
+    font-size: 1rem;
+    color: var(--text);
+  }
+  .payment-details p {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .payment-radio {
+    font-size: 20px;
+    color: var(--muted);
+  }
+  .payment-option.selected .payment-radio {
+    color: var(--accent);
+    content: "●";
+  }
 
   /* Testimonial */
   .social-proof {
@@ -563,6 +619,7 @@
     .features, .pricing, .how, .social-proof, .cta-section { padding: 80px 24px; }
     .mock-cards { grid-template-columns: repeat(3, 1fr); }
     footer { padding: 32px 24px; flex-direction: column; text-align: center; }
+    .modal-content { margin: 20% auto; }
   }
 </style>
 </head>
@@ -690,7 +747,7 @@
       <div class="step reveal">
         <div class="step-num">1</div>
         <h4>Subscribe</h4>
-        <p>Choose your plan and pay securely via PayPal. You'll receive login credentials within 2 minutes.</p>
+        <p>Choose your plan and pay securely via PayPal, card, or bank transfer. You'll receive login credentials within 2 minutes.</p>
       </div>
       <div class="step reveal">
         <div class="step-num">2</div>
@@ -732,7 +789,7 @@
         <li>1 user login</li>
         <li>Email support</li>
       </ul>
-      <div class="plan-btn plan-btn-ghost" data-plan="Starter">Get Starter</div>
+      <div class="plan-btn plan-btn-ghost" data-plan="Starter" data-price="49">Get Starter</div>
     </div>
 
     <!-- Pro (featured) -->
@@ -750,7 +807,7 @@
         <li>3 user logins</li>
         <li>Priority support</li>
       </ul>
-      <div class="plan-btn plan-btn-primary" data-plan="Pro">Get Pro</div>
+      <div class="plan-btn plan-btn-primary" data-plan="Pro" data-price="149">Get Pro</div>
     </div>
 
     <!-- Enterprise -->
@@ -767,7 +824,7 @@
         <li>Custom branding option</li>
         <li>SLA guarantee</li>
       </ul>
-      <div class="plan-btn plan-btn-ghost" data-plan="Enterprise">Get Enterprise</div>
+      <div class="plan-btn plan-btn-ghost" data-plan="Enterprise" data-price="299">Get Enterprise</div>
     </div>
 
   </div>
@@ -817,7 +874,7 @@
   </div>
 </footer>
 
-<!-- MODALS -->
+<!-- SIGNUP MODAL -->
 <div id="signupModal" class="modal">
   <div class="modal-content">
     <span class="close">&times;</span>
@@ -825,11 +882,13 @@
     <input type="text" id="signupName" placeholder="Full Name" required>
     <input type="email" id="signupEmail" placeholder="Email" required>
     <input type="hidden" id="signupPlan" value="Starter">
+    <input type="hidden" id="signupPrice" value="49">
     <button id="signupSubmit">Continue to Payment</button>
     <a href="#" id="switchToLogin">Already have an account? Login</a>
   </div>
 </div>
 
+<!-- LOGIN MODAL -->
 <div id="loginModal" class="modal">
   <div class="modal-content">
     <span class="close">&times;</span>
@@ -841,25 +900,87 @@
   </div>
 </div>
 
+<!-- PAYMENT OPTIONS MODAL -->
+<div id="paymentModal" class="modal">
+  <div class="modal-content">
+    <span class="close">&times;</span>
+    <h2>Choose Payment Method</h2>
+    <p style="color: var(--muted); margin-bottom: 24px;">Select how you'd like to pay for <strong id="selectedPlanName"></strong> ($<span id="selectedPlanPrice"></span>)</p>
+    
+    <div class="payment-options">
+      <!-- PayPal -->
+      <div class="payment-option" data-method="paypal">
+        <div class="payment-icon">🅿️</div>
+        <div class="payment-details">
+          <h3>PayPal</h3>
+          <p>Pay with your PayPal account or credit card</p>
+        </div>
+        <div class="payment-radio">○</div>
+      </div>
+      
+      <!-- Credit/Debit Card -->
+      <div class="payment-option" data-method="card">
+        <div class="payment-icon">💳</div>
+        <div class="payment-details">
+          <h3>Credit / Debit Card</h3>
+          <p>Visa, Mastercard, American Express</p>
+        </div>
+        <div class="payment-radio">○</div>
+      </div>
+      
+      <!-- Bank Account -->
+      <div class="payment-option" data-method="bank">
+        <div class="payment-icon">🏦</div>
+        <div class="payment-details">
+          <h3>Bank Account</h3>
+          <p>Direct bank transfer (via PayPal)</p>
+        </div>
+        <div class="payment-radio">○</div>
+      </div>
+      
+      <!-- Mobile Money (Botswana) -->
+      <div class="payment-option" data-method="mobile">
+        <div class="payment-icon">📱</div>
+        <div class="payment-details">
+          <h3>Mobile Money</h3>
+          <p>Orange Money, Airtel Money (Botswana)</p>
+        </div>
+        <div class="payment-radio">○</div>
+      </div>
+    </div>
+    
+    <button id="confirmPaymentBtn" class="btn-primary" style="width: 100%; margin-top: 24px;" disabled>Select a payment method</button>
+  </div>
+</div>
+
 <script>
 // API Configuration
 const API_URL = window.location.origin;
-
-// Check if we're in test mode (you can change this based on URL or env)
 const IS_TEST_MODE = true;  // Set to false for production
 
-// Signup function
-async function signup(name, email, plan) {
+// Payment state
+let currentPlan = '';
+let currentPrice = 0;
+let currentName = '';
+let currentEmail = '';
+let selectedPaymentMethod = '';
+
+// ========== CORE FUNCTIONS ==========
+
+async function signup(name, email, plan, paymentMethod) {
     try {
         const response = await fetch(`${API_URL}/api/signup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, email, plan })
+            body: JSON.stringify({ name, email, plan, payment_method: paymentMethod })
         });
         const data = await response.json();
         
         if (data.payment_url) {
             window.location.href = data.payment_url;
+        } else if (data.message) {
+            alert(data.message);
+            closeModals();
         } else {
             alert(data.error || 'Something went wrong');
         }
@@ -869,7 +990,6 @@ async function signup(name, email, plan) {
     }
 }
 
-// Login function
 async function login(email, password) {
     try {
         const response = await fetch(`${API_URL}/api/login`, {
@@ -890,18 +1010,100 @@ async function login(email, password) {
     }
 }
 
-// Demo function
-function viewDemo() {
-    const streamlitUrl = 'YOUR_STREAMLIT_URL';  // Replace with your Streamlit URL
-    window.open(`${streamlitUrl}?demo=true`, '_blank');
+async function requestBankTransfer(name, email, plan, phone) {
+    try {
+        const response = await fetch(`${API_URL}/api/request-bank-transfer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, plan, phone })
+        });
+        const data = await response.json();
+        alert(data.message || 'Bank transfer details have been sent to your email.');
+        closeModals();
+    } catch (error) {
+        console.error('Bank transfer request error:', error);
+        alert('Error requesting bank transfer. Please contact support.');
+    }
 }
 
-// Modal handling
+// ========== PAYMENT OPTIONS ==========
+
+function showPaymentOptions(plan, price) {
+    currentPlan = plan;
+    currentPrice = price;
+    selectedPaymentMethod = '';
+    
+    document.getElementById('selectedPlanName').textContent = plan;
+    document.getElementById('selectedPlanPrice').textContent = price;
+    
+    // Reset selections
+    document.querySelectorAll('.payment-option').forEach(opt => {
+        opt.classList.remove('selected');
+        opt.querySelector('.payment-radio').textContent = '○';
+    });
+    
+    document.getElementById('confirmPaymentBtn').disabled = true;
+    document.getElementById('confirmPaymentBtn').textContent = 'Select a payment method';
+    
+    document.getElementById('paymentModal').style.display = 'block';
+}
+
+function selectPaymentMethod(method) {
+    selectedPaymentMethod = method;
+    
+    document.querySelectorAll('.payment-option').forEach(opt => {
+        opt.classList.remove('selected');
+        opt.querySelector('.payment-radio').textContent = '○';
+    });
+    
+    // Highlight selected option
+    const selectedOption = document.querySelector(`.payment-option[data-method="${method}"]`);
+    if (selectedOption) {
+        selectedOption.classList.add('selected');
+        selectedOption.querySelector('.payment-radio').textContent = '●';
+    }
+    
+    const methodNames = {
+        'paypal': 'PayPal',
+        'card': 'Credit/Debit Card',
+        'bank': 'Bank Account',
+        'mobile': 'Mobile Money'
+    };
+    
+    document.getElementById('confirmPaymentBtn').disabled = false;
+    document.getElementById('confirmPaymentBtn').textContent = `Pay $${currentPrice} with ${methodNames[method]}`;
+}
+
+async function processPayment() {
+    if (!currentName || !currentEmail) {
+        // Get user info from signup modal
+        currentName = document.getElementById('signupName').value;
+        currentEmail = document.getElementById('signupEmail').value;
+        
+        if (!currentName || !currentEmail) {
+            alert('Please enter your name and email');
+            return;
+        }
+    }
+    
+    if (selectedPaymentMethod === 'mobile') {
+        const phone = prompt('Enter your mobile money number (e.g., 71XXXXXX for Orange Money):');
+        if (!phone) return;
+        await requestBankTransfer(currentName, currentEmail, currentPlan, phone);
+    } else {
+        await signup(currentName, currentEmail, currentPlan, selectedPaymentMethod);
+    }
+}
+
+// ========== MODAL HANDLING ==========
+
 const signupModal = document.getElementById('signupModal');
 const loginModal = document.getElementById('loginModal');
+const paymentModal = document.getElementById('paymentModal');
 
-function openSignupModal(plan = 'Starter') {
+function openSignupModal(plan = 'Starter', price = 49) {
     document.getElementById('signupPlan').value = plan;
+    document.getElementById('signupPrice').value = price;
     signupModal.style.display = 'block';
 }
 
@@ -912,38 +1114,61 @@ function openLoginModal() {
 function closeModals() {
     signupModal.style.display = 'none';
     loginModal.style.display = 'none';
+    paymentModal.style.display = 'none';
+    // Reset payment state
+    currentPlan = '';
+    currentPrice = 0;
+    currentName = '';
+    currentEmail = '';
+    selectedPaymentMethod = '';
 }
 
-// Event Listeners
+// ========== EVENT LISTENERS ==========
+
+// Pricing buttons
 document.querySelectorAll('.plan-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         const plan = btn.getAttribute('data-plan');
-        openSignupModal(plan);
+        const price = btn.getAttribute('data-price');
+        openSignupModal(plan, price);
     });
 });
 
-document.getElementById('freeTrialBtn')?.addEventListener('click', () => openSignupModal('Starter'));
-document.getElementById('ctaBtn')?.addEventListener('click', () => openSignupModal('Starter'));
-document.querySelector('.nav-cta')?.addEventListener('click', () => openSignupModal('Starter'));
-document.getElementById('demoBtn')?.addEventListener('click', viewDemo);
+// Free trial and CTA buttons
+document.getElementById('freeTrialBtn')?.addEventListener('click', () => openSignupModal('Starter', 49));
+document.getElementById('ctaBtn')?.addEventListener('click', () => openSignupModal('Starter', 49));
+document.querySelector('.nav-cta')?.addEventListener('click', () => openSignupModal('Starter', 49));
+
+// Demo button
+document.getElementById('demoBtn')?.addEventListener('click', () => {
+    const streamlitUrl = 'YOUR_STREAMLIT_URL';
+    window.open(`${streamlitUrl}?demo=true`, '_blank');
+});
+
+// Login link
 document.getElementById('loginLink')?.addEventListener('click', (e) => {
     e.preventDefault();
     openLoginModal();
 });
 
-// Modal buttons
+// Signup submit
 document.getElementById('signupSubmit')?.addEventListener('click', () => {
     const name = document.getElementById('signupName').value;
     const email = document.getElementById('signupEmail').value;
     const plan = document.getElementById('signupPlan').value;
+    const price = parseInt(document.getElementById('signupPrice').value);
+    
     if (name && email) {
-        signup(name, email, plan);
+        currentName = name;
+        currentEmail = email;
+        showPaymentOptions(plan, price);
         closeModals();
     } else {
         alert('Please fill in all fields');
     }
 });
 
+// Login submit
 document.getElementById('loginSubmit')?.addEventListener('click', () => {
     const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
@@ -955,6 +1180,23 @@ document.getElementById('loginSubmit')?.addEventListener('click', () => {
     }
 });
 
+// Payment option selection
+document.querySelectorAll('.payment-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+        const method = opt.getAttribute('data-method');
+        selectPaymentMethod(method);
+    });
+});
+
+// Confirm payment button
+document.getElementById('confirmPaymentBtn')?.addEventListener('click', () => {
+    if (selectedPaymentMethod) {
+        processPayment();
+        paymentModal.style.display = 'none';
+    }
+});
+
+// Modal switching
 document.getElementById('switchToLogin')?.addEventListener('click', (e) => {
     e.preventDefault();
     closeModals();
@@ -967,10 +1209,11 @@ document.getElementById('switchToSignup')?.addEventListener('click', (e) => {
     openSignupModal();
 });
 
-// Close modals when clicking X or outside
+// Close modals
 document.querySelectorAll('.close').forEach(el => {
     el.addEventListener('click', closeModals);
 });
+
 window.onclick = function(event) {
     if (event.target.classList.contains('modal')) {
         closeModals();
@@ -982,6 +1225,8 @@ const observer = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
 }, { threshold: 0.1 });
 document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+console.log('Front-Tech ready!');
 </script>
 </body>
 </html>
