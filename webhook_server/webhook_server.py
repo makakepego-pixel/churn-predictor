@@ -1,21 +1,16 @@
 """
-Front-Tech — Stripe Webhook Server
-When a client pays, this server:
-  1. Receives the Stripe payment event
-  2. Creates username + password automatically
-  3. Saves to clients.json
-  4. Emails login credentials to the client
-
-Deploy free on Railway: railway.app
-Run locally: python webhook_server.py
+Front-Tech — PayPal Webhook Server + Landing Page
 """
 
-import os, json, random, string, smtplib
+import os
+import json
+import random
+import string
+import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
-from flask import Flask, request, jsonify
-import stripe
+from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,43 +18,60 @@ load_dotenv()
 app = Flask(__name__)
 
 # ── Config — set all values in .env file ──
-stripe.api_key    = os.getenv("STRIPE_SECRET_KEY")
-WEBHOOK_SECRET    = os.getenv("STRIPE_WEBHOOK_SECRET")
 SMTP_HOST         = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT         = int(os.getenv("SMTP_PORT", 587))
 SMTP_USER         = os.getenv("SMTP_USER")
 SMTP_PASS         = os.getenv("SMTP_PASS")
 FROM_EMAIL        = os.getenv("FROM_EMAIL", SMTP_USER)
-DASHBOARD_URL     = os.getenv("DASHBOARD_URL", "https://your-app.streamlit.app")
+DASHBOARD_URL     = os.getenv("DASHBOARD_URL", "https://your-app.railway.app")
 CLIENTS_FILE      = "clients.json"
 
-# ── Replace with your real Stripe Price IDs ──
+# ── Map PayPal product names to your plan names ──
 PLAN_MAP = {
-    "price_STARTER_ID_HERE":    "Starter",
-    "price_PRO_ID_HERE":        "Pro",
-    "price_ENTERPRISE_ID_HERE": "Enterprise",
+    "Starter Plan - Churn Predictor": "Starter",
+    "Pro Plan - Churn Predictor": "Pro",
+    "Enterprise Plan - Churn Predictor": "Enterprise",
+    "Starter": "Starter",
+    "Pro": "Pro", 
+    "Enterprise": "Enterprise"
 }
 
+# ========== LANDING PAGE ROUTES ==========
+
+@app.route('/')
+@app.route('/index')
+@app.route('/index.html')
+def serve_landing():
+    """Serve the main landing page"""
+    return send_from_directory('../landing', 'index.HTML')
+
+@app.route('/landing/<path:filename>')
+def serve_landing_files(filename):
+    """Serve static files (CSS, images, etc.) if needed"""
+    return send_from_directory('../landing', filename)
+
+# ========== PAYPAL WEBHOOK ==========
 
 def generate_password(length=12):
+    """Generate a random password"""
     chars = string.ascii_letters + string.digits + "!@#$"
     return ''.join(random.choices(chars, k=length))
 
-
 def load_clients():
+    """Load existing clients from JSON file"""
     if os.path.exists(CLIENTS_FILE):
         with open(CLIENTS_FILE) as f:
             return json.load(f)
     return {}
 
-
 def save_clients(clients):
+    """Save clients to JSON file"""
     with open(CLIENTS_FILE, "w") as f:
         json.dump(clients, f, indent=2)
     print(f"[{datetime.now():%H:%M:%S}] Saved {len(clients)} clients")
 
-
 def make_username(email):
+    """Generate unique username from email"""
     base = email.split("@")[0].lower()
     base = ''.join(c for c in base if c.isalnum() or c == '_')
     clients = load_clients()
@@ -69,10 +81,10 @@ def make_username(email):
         counter += 1
     return username
 
-
 def send_welcome_email(to_email, name, username, password, plan):
+    """Send welcome email with login credentials"""
     if not SMTP_USER or not SMTP_PASS:
-        print(f"[EMAIL SKIPPED] Credentials: {username} / {password}")
+        print(f"[EMAIL SKIPPED] Would send: {username} / {password} to {to_email}")
         return
 
     msg = MIMEMultipart("alternative")
@@ -123,82 +135,93 @@ def send_welcome_email(to_email, name, username, password, plan):
     except Exception as e:
         print(f"[EMAIL ERROR] {e}")
 
-
 def provision_client(email, name, plan):
+    """Create client account and send credentials"""
     clients  = load_clients()
     username = make_username(email)
     password = generate_password()
+    
     clients[username] = {
         "password": password,
         "name":     name,
         "email":    email,
         "plan":     plan,
         "created":  datetime.now().isoformat(),
+        "payment_method": "paypal"
     }
+    
     save_clients(clients)
     send_welcome_email(email, name, username, password, plan)
     print(f"[PROVISIONED] {username} ({plan}) — {email}")
+    
+    return username, password
 
-
-def revoke_access(customer_id):
-    try:
-        customer = stripe.Customer.retrieve(customer_id)
-        email    = customer.get("email", "")
-        clients  = load_clients()
-        to_del   = [u for u, v in clients.items() if v.get("email") == email]
-        for u in to_del:
-            del clients[u]
-            print(f"[REVOKED] {u}")
-        if to_del:
-            save_clients(clients)
-    except Exception as e:
-        print(f"[REVOKE ERROR] {e}")
-
-
-@app.route("/webhook", methods=["POST"])
-def stripe_webhook():
-    payload    = request.get_data()
-    sig_header = request.headers.get("Stripe-Signature")
-
-    try:
-        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
-    except stripe.error.SignatureVerificationError:
-        return jsonify({"error": "Invalid signature"}), 400
-
-    etype = event["type"]
-    print(f"[WEBHOOK] {etype}")
-
-    if etype == "checkout.session.completed":
-        s      = event["data"]["object"]
-        email  = s.get("customer_email") or s.get("customer_details", {}).get("email", "")
-        name   = s.get("customer_details", {}).get("name", email.split("@")[0])
-        pid    = s.get("metadata", {}).get("price_id", "")
-        plan   = PLAN_MAP.get(pid, "Pro")
-        if email:
-            provision_client(email, name, plan)
-
-    elif etype == "invoice.payment_succeeded":
-        inv    = event["data"]["object"]
-        email  = inv.get("customer_email", "")
-        name   = inv.get("customer_name", email.split("@")[0])
-        pid    = (inv.get("lines", {}).get("data") or [{}])[0].get("price", {}).get("id", "")
-        plan   = PLAN_MAP.get(pid, "Pro")
-        emails = [v.get("email") for v in load_clients().values()]
-        if email and email not in emails:
-            provision_client(email, name, plan)
-
-    elif etype == "customer.subscription.deleted":
-        revoke_access(event["data"]["object"].get("customer"))
-
-    return jsonify({"status": "ok"}), 200
-
+@app.route("/paypal-webhook", methods=["POST"])
+def paypal_webhook():
+    """Handle PayPal IPN (Instant Payment Notification)"""
+    data = request.form.to_dict()
+    
+    print(f"[PAYPAL WEBHOOK] Received: {json.dumps(data, indent=2)}")
+    
+    payment_status = data.get('payment_status')
+    txn_id = data.get('txn_id')
+    
+    if payment_status != 'Completed':
+        print(f"[PAYPAL] Payment not completed. Status: {payment_status}")
+        return jsonify({"status": "ignored", "reason": f"Status: {payment_status}"}), 200
+    
+    payer_email = data.get('payer_email')
+    first_name = data.get('first_name', '')
+    last_name = data.get('last_name', '')
+    full_name = f"{first_name} {last_name}".strip() or payer_email.split('@')[0]
+    
+    item_name = data.get('item_name', 'Pro Plan - Churn Predictor')
+    plan = PLAN_MAP.get(item_name, 'Pro')
+    
+    mc_gross = data.get('mc_gross', '0')
+    mc_currency = data.get('mc_currency', 'USD')
+    
+    print(f"[PAYPAL] Payment completed! TXN: {txn_id}, Amount: {mc_gross} {mc_currency}, Plan: {plan}")
+    
+    if payer_email:
+        username, password = provision_client(payer_email, full_name, plan)
+        return jsonify({
+            "status": "success", 
+            "username": username,
+            "plan": plan
+        }), 200
+    else:
+        print(f"[PAYPAL ERROR] No email in IPN")
+        return jsonify({"error": "No email provided"}), 400
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "clients": len(load_clients())}), 200
+    """Health check endpoint for Railway"""
+    return jsonify({
+        "status": "healthy", 
+        "clients": len(load_clients()),
+        "payment_method": "paypal"
+    }), 200
 
+@app.route("/admin/clients", methods=["GET"])
+def list_clients():
+    """Simple client list"""
+    clients = load_clients()
+    safe_clients = {}
+    for username, data in clients.items():
+        safe_clients[username] = {
+            "name": data.get("name"),
+            "email": data.get("email"),
+            "plan": data.get("plan"),
+            "created": data.get("created"),
+            "payment_method": data.get("payment_method", "paypal")
+        }
+    return jsonify(safe_clients)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
-    print(f"Front-Tech webhook running on port {port}")
+    print(f"🚀 Front-Tech PayPal webhook server running on port {port}")
+    print(f"📁 Clients will be saved to: {CLIENTS_FILE}")
+    print(f"🌐 Landing page available at: http://localhost:{port}")
+    print(f"📧 Email sending: {'✅ ENABLED' if SMTP_USER and SMTP_PASS else '❌ DISABLED'}")
     app.run(host="0.0.0.0", port=port, debug=False)
