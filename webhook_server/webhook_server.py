@@ -1,5 +1,7 @@
 """
 Front-Tech — Complete Webhook Server (PayPal + Gmail)
+Handles: User signup, PayPal IPN, User login, Email delivery
+Supports both Sandbox and Live PayPal modes
 """
 
 import os
@@ -19,15 +21,26 @@ load_dotenv()
 app = Flask(__name__)
 
 # ── Configuration ──
-SMTP_HOST     = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT     = int(os.getenv("SMTP_PORT", 587))
-SMTP_USER     = os.getenv("SMTP_USER", "")
-SMTP_PASS     = os.getenv("SMTP_PASS", "")
-FROM_EMAIL    = os.getenv("FROM_EMAIL", SMTP_USER)
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
+FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USER)
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "https://your-app.streamlit.app")
-PAYPAL_EMAIL  = os.getenv("PAYPAL_EMAIL", "frontech@example.com")
-SECRET_KEY    = os.getenv("SECRET_KEY", "change-this-secret")
-CLIENTS_FILE  = "clients.json"
+PAYPAL_EMAIL = os.getenv("PAYPAL_EMAIL", "frontech@example.com")
+PAYPAL_MODE = os.getenv("PAYPAL_MODE", "sandbox")  # "sandbox" or "live"
+SECRET_KEY = os.getenv("SECRET_KEY", "change-this-secret")
+CLIENTS_FILE = "clients.json"
+
+# Set PayPal URLs based on mode
+if PAYPAL_MODE == "sandbox":
+    PAYPAL_URL = "https://www.sandbox.paypal.com/cgi-bin/webscr"
+    IPN_VERIFY_URL = "https://ipnpb.sandbox.paypal.com/cgi-bin/webscr"
+    print("🔧 PayPal Mode: SANDBOX (for testing)")
+else:
+    PAYPAL_URL = "https://www.paypal.com/cgi-bin/webscr"
+    IPN_VERIFY_URL = "https://ipnpb.paypal.com/cgi-bin/webscr"
+    print("💰 PayPal Mode: LIVE (production)")
 
 # Plan prices
 PLAN_PRICES = {
@@ -42,10 +55,8 @@ def find_landing_page():
     """Find the correct path to landing page"""
     import os
     
-    # Get current directory
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # Check possible locations
     locations_to_check = [
         os.path.join(current_dir, 'landing'),
         os.path.join(os.path.dirname(current_dir), 'landing'),
@@ -58,7 +69,6 @@ def find_landing_page():
     for location in locations_to_check:
         try:
             if os.path.exists(location):
-                # Check for any index.html file (case insensitive)
                 for file in os.listdir(location):
                     if file.lower() == 'index.html' or file.lower() == 'index.htm':
                         print(f"[DEBUG] Found landing page: {location}/{file}")
@@ -183,6 +193,7 @@ def health():
         "clients": len(load_clients()),
         "landing_path": LANDING_PATH,
         "index_file": INDEX_FILE,
+        "paypal_mode": PAYPAL_MODE,
         "time": datetime.now().isoformat()
     })
 
@@ -207,7 +218,8 @@ def api_signup():
             if info.get('status') == 'active':
                 return jsonify({"error": "Email already registered. Please login."}), 400
             elif info.get('status') == 'pending':
-                paypal_url = f"https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business={PAYPAL_EMAIL}&item_name={plan} Plan&amount={price}&currency_code=USD&notify_url={request.host_url}paypal-ipn&return_url={request.host_url}?payment=success"
+                # Resend payment link
+                paypal_url = f"{PAYPAL_URL}?cmd=_xclick&business={PAYPAL_EMAIL}&item_name={plan} Plan&amount={price}&currency_code=USD&notify_url={request.host_url}paypal-ipn&return_url={request.host_url}?payment=success"
                 return jsonify({"payment_url": paypal_url})
 
     username = make_username(name, email)
@@ -223,7 +235,7 @@ def api_signup():
     }
     save_clients(clients)
 
-    paypal_url = f"https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business={PAYPAL_EMAIL}&item_name={plan} Plan&amount={price}&currency_code=USD&notify_url={request.host_url}paypal-ipn&return_url={request.host_url}?payment=success"
+    paypal_url = f"{PAYPAL_URL}?cmd=_xclick&business={PAYPAL_EMAIL}&item_name={plan} Plan&amount={price}&currency_code=USD&notify_url={request.host_url}paypal-ipn&return_url={request.host_url}?payment=success"
 
     return jsonify({"payment_url": paypal_url})
 
@@ -250,6 +262,10 @@ def api_login():
 
     return jsonify({"error": "Invalid email or password"}), 401
 
+@app.route('/api/status', methods=['GET'])
+def api_status():
+    return jsonify({"status": "ok", "message": "Front-Tech API is running"})
+
 # ========== PAYPAL WEBHOOK ==========
 
 @app.route("/paypal-ipn", methods=["POST"])
@@ -259,7 +275,7 @@ def paypal_ipn():
 
     try:
         req = urllib.request.Request(
-            "https://ipnpb.paypal.com/cgi-bin/webscr",
+            IPN_VERIFY_URL,
             data=("cmd=_notify-validate&" + raw).encode(),
             headers={"Content-Type": "application/x-www-form-urlencoded"})
         verified = urllib.request.urlopen(req, timeout=10).read().decode() == "VERIFIED"
@@ -309,6 +325,8 @@ def paypal_ipn():
 
     return "OK", 200
 
+# ========== ADMIN ROUTES ==========
+
 @app.route("/clients")
 def list_clients():
     if request.args.get("secret") != SECRET_KEY:
@@ -317,6 +335,20 @@ def list_clients():
     safe_clients = {u: {"name": v.get("name"), "email": v.get("email"), "plan": v.get("plan"), "status": v.get("status")}
                     for u, v in clients.items()}
     return jsonify({"count": len(clients), "clients": safe_clients})
+
+@app.route("/notify", methods=["POST"])
+def manual_notify():
+    data = request.get_json() or {}
+    if data.get("secret") != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 401
+    name = data.get("name", "")
+    email = data.get("email", "")
+    plan = data.get("plan", "Pro")
+    amount = data.get("amount", "")
+    if not name or not email:
+        return jsonify({"error": "name and email required"}), 400
+    u, p = provision_client(name, email, plan, amount)
+    return jsonify({"status": "provisioned", "username": u})
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
