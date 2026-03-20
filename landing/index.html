@@ -28,7 +28,7 @@
     overflow-x: hidden;
   }
 
-  /* ── Grid noise texture overlay ── */
+  /* Grid noise texture overlay */
   body::before {
     content: '';
     position: fixed;
@@ -41,7 +41,7 @@
     z-index: 0;
   }
 
-  /* ── Glow orbs ── */
+  /* Glow orbs */
   .orb {
     position: fixed;
     border-radius: 50%;
@@ -52,7 +52,7 @@
   .orb-1 { width: 600px; height: 600px; background: rgba(0,229,160,0.07); top: -200px; right: -100px; }
   .orb-2 { width: 500px; height: 500px; background: rgba(0,102,255,0.06); bottom: 200px; left: -150px; }
 
-  /* ── Nav ── */
+  /* Nav */
   nav {
     position: fixed; top: 0; left: 0; right: 0; z-index: 100;
     display: flex; align-items: center; justify-content: space-between;
@@ -84,10 +84,10 @@
   }
   .nav-cta:hover { opacity: 0.85; transform: translateY(-1px); }
 
-  /* ── Sections ── */
+  /* Sections */
   section { position: relative; z-index: 1; }
 
-  /* ── Hero ── */
+  /* Hero */
   .hero {
     min-height: 100vh;
     display: flex; flex-direction: column;
@@ -181,7 +181,7 @@
   }
   .stat-label { font-size: 0.85rem; color: var(--muted); margin-top: 4px; }
 
-  /* ── Features ── */
+  /* Features */
   .features {
     padding: 120px 60px;
     max-width: 1200px;
@@ -229,7 +229,7 @@
   }
   .feature-card p { color: var(--muted); font-size: 0.92rem; line-height: 1.6; }
 
-  /* ── How it works ── */
+  /* How it works */
   .how {
     padding: 120px 60px;
     background: var(--surface);
@@ -271,7 +271,7 @@
   }
   .step p { color: var(--muted); font-size: 0.88rem; }
 
-  /* ── Pricing ── */
+  /* Pricing */
   .pricing {
     padding: 120px 60px;
     max-width: 1200px;
@@ -358,7 +358,7 @@
   }
   .plan-btn-ghost:hover { border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.04); }
 
-  /* ── Modal ── */
+  /* Modal */
   .modal {
     display: none;
     position: fixed;
@@ -420,7 +420,7 @@
   }
   .close:hover { color: var(--text); }
 
-  /* ── Testimonial ── */
+  /* Testimonial */
   .social-proof {
     padding: 80px 60px;
     background: var(--surface);
@@ -449,7 +449,7 @@
   .testimonial-author { font-weight: 500; font-size: 0.88rem; }
   .testimonial-role { color: var(--muted); font-size: 0.8rem; }
 
-  /* ── CTA ── */
+  /* CTA */
   .cta-section {
     padding: 140px 60px;
     text-align: center;
@@ -468,7 +468,7 @@
   .cta-section h2 { max-width: 700px; margin: 0 auto 16px; }
   .cta-section p { color: var(--muted); max-width: 480px; margin: 0 auto 40px; }
 
-  /* ── Footer ── */
+  /* Footer */
   footer {
     border-top: 1px solid var(--border);
     padding: 40px 60px;
@@ -477,7 +477,7 @@
     color: var(--muted); font-size: 0.85rem;
   }
 
-  /* ── Animations ── */
+  /* Animations */
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(24px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -488,7 +488,7 @@
   }
   .reveal.visible { opacity: 1; transform: translateY(0); }
 
-  /* ── Dashboard preview mockup ── */
+  /* Dashboard preview mockup */
   .mockup-wrap {
     margin-top: 60px;
     position: relative;
@@ -845,41 +845,55 @@
 // API Configuration
 const API_URL = window.location.origin;
 
+// Check if we're in test mode (you can change this based on URL or env)
+const IS_TEST_MODE = true;  // Set to false for production
+
 // Signup function
 async function signup(name, email, plan) {
-    const response = await fetch(`${API_URL}/api/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, plan })
-    });
-    const data = await response.json();
-    
-    if (data.payment_url) {
-        window.location.href = data.payment_url;
-    } else {
-        alert(data.error || 'Something went wrong');
+    try {
+        const response = await fetch(`${API_URL}/api/signup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, plan })
+        });
+        const data = await response.json();
+        
+        if (data.payment_url) {
+            window.location.href = data.payment_url;
+        } else {
+            alert(data.error || 'Something went wrong');
+        }
+    } catch (error) {
+        console.error('Signup error:', error);
+        alert('Network error. Please try again.');
     }
 }
 
 // Login function
 async function login(email, password) {
-    const response = await fetch(`${API_URL}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-    });
-    const data = await response.json();
-    
-    if (data.dashboard_url) {
-        window.location.href = data.dashboard_url;
-    } else {
-        alert(data.error || 'Invalid credentials');
+    try {
+        const response = await fetch(`${API_URL}/api/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await response.json();
+        
+        if (data.dashboard_url) {
+            window.location.href = data.dashboard_url;
+        } else {
+            alert(data.error || 'Invalid credentials');
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        alert('Network error. Please try again.');
     }
 }
 
 // Demo function
 function viewDemo() {
-    window.open('YOUR_STREAMLIT_URL?demo=true', '_blank');
+    const streamlitUrl = 'YOUR_STREAMLIT_URL';  // Replace with your Streamlit URL
+    window.open(`${streamlitUrl}?demo=true`, '_blank');
 }
 
 // Modal handling
