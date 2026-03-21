@@ -12,4 +12,4 @@ stripe>=8.0
 python-dotenv>=1.0
 gunicorn==21.2.0
 gunicorn==21.2.0
-python>=3.11
+python-version>=3.11
