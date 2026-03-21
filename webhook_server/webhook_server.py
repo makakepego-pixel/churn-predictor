@@ -190,5 +190,11 @@ def api_signup():
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT") or 8080)
-    print(f"Starting server → http://0.0.0.0:{port}  (Railway PORT = {os.getenv('PORT')})")
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    print(f"RAILWAY: Starting on 0.0.0.0 port {port} (env PORT={os.getenv('PORT')})")
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False,
+        use_reloader=False,
+        threaded=True
+    )
