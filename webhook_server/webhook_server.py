@@ -1,7 +1,6 @@
 """
-Front-Tech — Webhook Server with SendGrid Email
+Front-Tech — Webhook Server with Resend Email
 """
-
 import os
 import json
 import random
@@ -11,21 +10,22 @@ import urllib.parse
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
-import requests
+import requests  # still useful for other potential calls
+from resend import Resend  # ← new import
 
 load_dotenv()
 app = Flask(__name__)
 
 # ── Configuration ──
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@front-tech.io")
-DASHBOARD_URL = os.getenv("DASHBOARD_URL", "https://your-streamlit.streamlit.app")
+DASHBOARD_URL = os.getenv("STREAMLIT_URL", "https://your-streamlit-url.up.railway.app")  # ← use your actual variable name
 PAYPAL_EMAIL = os.getenv("PAYPAL_EMAIL", "")
 PAYPAL_MODE = os.getenv("PAYPAL_MODE", "sandbox")
 SECRET_KEY = os.getenv("SECRET_KEY", "change-this-secret")
 CLIENTS_FILE = "clients.json"
 
-# Bank details
+# Bank details (for manual transfer fallback)
 BANK_NAME = os.getenv("BANK_NAME", "Access Bank Botswana")
 BANK_ACCOUNT_NAME = os.getenv("BANK_ACCOUNT_NAME", "Front-Tech (PTY) Ltd")
 BANK_ACCOUNT_NUMBER = os.getenv("BANK_ACCOUNT_NUMBER", "1234567890")
@@ -41,8 +41,12 @@ else:
 
 PLAN_PRICES = {"Starter": "49.00", "Pro": "149.00", "Enterprise": "299.00"}
 
-# ========== FIND LANDING PAGE ==========
+# Initialize Resend client once
+resend_client = None
+if RESEND_API_KEY:
+    resend_client = Resend(RESEND_API_KEY)
 
+# ========== FIND LANDING PAGE ==========
 def find_landing_page():
     import os
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -74,56 +78,44 @@ LANDING_PATH, INDEX_FILE = find_landing_page()
 print(f"📁 Landing path: {LANDING_PATH}")
 print(f"📄 Index file: {INDEX_FILE}")
 
-# ========== EMAIL FUNCTIONS (SendGrid) ==========
-
+# ========== EMAIL FUNCTIONS (Resend) ==========
 def send_email(to_email, subject, html_content):
-    """Send email using SendGrid API"""
-    if not SENDGRID_API_KEY:
-        print(f"[EMAIL SKIPPED] No API key. Would send to {to_email}")
+    """Send email using Resend API"""
+    if not resend_client:
+        print(f"[EMAIL SKIPPED] No RESEND_API_KEY. Would send to {to_email}")
         return False
     
     try:
-        response = requests.post(
-            "https://api.sendgrid.com/v3/mail/send",
-            headers={
-                "Authorization": f"Bearer {SENDGRID_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "personalizations": [{"to": [{"email": to_email}]}],
-                "from": {"email": FROM_EMAIL, "name": "Front-Tech"},
-                "subject": subject,
-                "content": [{"type": "text/html", "value": html_content}]
-            }
-        )
-        if response.status_code == 202:
-            print(f"[EMAIL SENT] → {to_email}")
-            return True
-        else:
-            print(f"[EMAIL ERROR] {response.status_code}: {response.text}")
-            return False
+        resend_client.Emails.send({
+            "from": FROM_EMAIL,
+            "to": to_email,
+            "subject": subject,
+            "html": html_content
+        })
+        print(f"[EMAIL SENT via Resend] → {to_email}")
+        return True
     except Exception as e:
-        print(f"[EMAIL ERROR] {e}")
+        print(f"[RESEND ERROR] {str(e)}")
         return False
 
 def send_welcome_email(to_email, name, username, password, plan, payment_method="paypal"):
-    """Send welcome email"""
+    """Send welcome email with credentials"""
     html = f"""
     <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#04080f;color:#e8edf5;padding:40px;border-radius:12px">
       <h1 style="color:#fff">Welcome to <span style="color:#00e5a0">Front-Tech</span>! 🎉</h1>
-      <p>Hi <strong>{name}</strong>, your <strong>{plan}</strong> plan is active.</p>
+      <p>Hi <strong>{name}</strong>, your <strong>{plan}</strong> plan is now active.</p>
       <div style="background:#0e1a2e;border:1px solid #1a2640;border-radius:10px;padding:24px;margin:24px 0">
-        <p><strong>URL:</strong> <a href="{DASHBOARD_URL}" style="color:#00e5a0">{DASHBOARD_URL}</a></p>
+        <p><strong>Dashboard URL:</strong> <a href="{DASHBOARD_URL}" style="color:#00e5a0">{DASHBOARD_URL}</a></p>
         <p><strong>Username:</strong> <code>{username}</code></p>
         <p><strong>Password:</strong> <code>{password}</code></p>
       </div>
-      <p>Payment Method: {payment_method}</p>
+      <p>Payment Method: {payment_method.capitalize()}</p>
       <a href="{DASHBOARD_URL}" style="display:inline-block;background:#00e5a0;color:#000;padding:14px 32px;border-radius:8px;text-decoration:none">Launch Dashboard →</a>
+      <p style="margin-top:24px;font-size:0.9rem;color:#aaa;">If you didn't request this, please ignore this email.</p>
     </div>"""
-    return send_email(to_email, f"Welcome to Front-Tech — Your {plan} Plan", html)
+    return send_email(to_email, f"Welcome to Front-Tech — Your {plan} Plan Activated", html)
 
 # ========== HELPER FUNCTIONS ==========
-
 def generate_password(length=10):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
@@ -149,17 +141,23 @@ def provision_client(name, email, plan, amount="", payment_method="paypal"):
     clients = load_clients()
     username = make_username(name, email)
     password = generate_password()
+    
     clients[username] = {
-        "password": password, "name": name, "email": email,
-        "plan": plan, "amount": amount, "status": "active",
-        "payment_method": payment_method, "created": datetime.now().isoformat()
+        "password": password,           # ← plain text (we'll improve with JWT later)
+        "name": name,
+        "email": email,
+        "plan": plan,
+        "amount": amount,
+        "status": "active",
+        "payment_method": payment_method,
+        "created": datetime.now().isoformat()
     }
     save_clients(clients)
+    
     send_welcome_email(email, name, username, password, plan, payment_method)
     return username, password
 
 # ========== ROUTES ==========
-
 @app.route('/')
 def serve_landing():
     if not LANDING_PATH or not INDEX_FILE:
@@ -176,10 +174,10 @@ def test_page():
 @app.route("/health")
 def health():
     return jsonify({
-        "status": "ok", 
-        "clients": len(load_clients()), 
+        "status": "ok",
+        "clients": len(load_clients()),
         "paypal_mode": PAYPAL_MODE,
-        "email_configured": bool(SENDGRID_API_KEY)
+        "email_provider": "Resend" if RESEND_API_KEY else "Not configured"
     })
 
 @app.route('/api/demo', methods=['POST'])
@@ -188,32 +186,37 @@ def api_demo():
     name = data.get('name')
     email = data.get('email')
     
+    if not name or not email:
+        return jsonify({"error": "Name and email required"}), 400
+    
     clients = load_clients()
-    for username, info in clients.items():
-        if info.get('email') == email:
-            if info.get('status') == 'active':
-                return jsonify({"error": "You already have an account. Please login."}), 400
+    for info in clients.values():
+        if info.get('email') == email and info.get('status') in ['active', 'demo']:
+            return jsonify({"error": "You already have an account. Please login."}), 400
     
     username = make_username(name, email)
     demo_password = generate_password(8)
     
     clients[username] = {
-        "name": name, "email": email, "plan": "Demo", "status": "demo",
-        "demo_access": True, "temp_password": demo_password,
+        "name": name,
+        "email": email,
+        "plan": "Demo",
+        "status": "demo",
+        "demo_access": True,
+        "temp_password": demo_password,
         "created": datetime.now().isoformat()
     }
     save_clients(clients)
     
     demo_html = f"""
     <h1>Front-Tech Demo Access</h1>
-    <p>Hi {name}, your demo account is ready!</p>
-    <p><strong>URL:</strong> {DASHBOARD_URL}</p>
+    <p>Hi {name}, your 7-day demo account is ready!</p>
+    <p><strong>Dashboard:</strong> <a href="{DASHBOARD_URL}">{DASHBOARD_URL}</a></p>
     <p><strong>Username:</strong> {username}</p>
     <p><strong>Password:</strong> {demo_password}</p>
-    <p>This demo expires in 7 days.</p>
-    <p>To upgrade, visit our website and choose a plan.</p>"""
+    <p>This demo expires in 7 days. Upgrade anytime on our website.</p>"""
     
-    send_email(email, "Your Front-Tech Demo Access", demo_html)
+    send_email(email, "Your Front-Tech Demo Access is Ready", demo_html)
     return jsonify({"success": True, "message": "Demo credentials sent to your email"})
 
 @app.route('/api/signup', methods=['POST'])
@@ -234,9 +237,13 @@ def api_signup():
     temp_password = generate_password()
     
     clients[username] = {
-        "name": name, "email": email, "plan": plan,
-        "status": "pending", "payment_method": payment_method,
-        "temp_password": temp_password, "created": datetime.now().isoformat()
+        "name": name,
+        "email": email,
+        "plan": plan,
+        "status": "pending",
+        "payment_method": payment_method,
+        "temp_password": temp_password,
+        "created": datetime.now().isoformat()
     }
     save_clients(clients)
     
@@ -269,21 +276,24 @@ def request_bank_transfer():
     email = data.get('email')
     plan = data.get('plan')
     price = PLAN_PRICES.get(plan, "49.00")
-    bwp_amount = float(price) * 13.5
+    bwp_amount = float(price) * 13.5  # approximate rate
     
     bank_html = f"""
-    <h2>Bank Transfer Instructions</h2>
-    <p>Hi {name}, please transfer:</p>
-    <p><strong>Bank:</strong> {BANK_NAME}</p>
-    <p><strong>Account Name:</strong> {BANK_ACCOUNT_NAME}</p>
-    <p><strong>Account Number:</strong> {BANK_ACCOUNT_NUMBER}</p>
-    <p><strong>SWIFT:</strong> {BANK_SWIFT_CODE}</p>
-    <p><strong>Amount:</strong> BWP {bwp_amount:.2f} (USD ${price})</p>
-    <p><strong>Reference:</strong> CHURN-{plan[:3]}-{name[:5].upper()}</p>
-    <p>We'll activate your account within 24 hours.</p>"""
+    <h2>Bank Transfer Instructions - {plan} Plan</h2>
+    <p>Hi {name}, please make a transfer for:</p>
+    <ul>
+      <li><strong>Bank:</strong> {BANK_NAME}</li>
+      <li><strong>Account Name:</strong> {BANK_ACCOUNT_NAME}</li>
+      <li><strong>Account Number:</strong> {BANK_ACCOUNT_NUMBER}</li>
+      <li><strong>SWIFT/BIC:</strong> {BANK_SWIFT_CODE}</li>
+      <li><strong>Amount:</strong> BWP {bwp_amount:.2f} (≈ USD ${price})</li>
+      <li><strong>Reference:</strong> CHURN-{plan[:3]}-{name[:5].upper()}</li>
+    </ul>
+    <p>We'll activate your account within 24 hours after confirmation.</p>
+    <p>Questions? Reply to this email.</p>"""
     
-    send_email(email, f"Bank Transfer Instructions - {plan} Plan", bank_html)
-    return jsonify({"message": "Bank transfer details sent to your email"})
+    send_email(email, f"Bank Transfer Details - {plan} Plan", bank_html)
+    return jsonify({"message": "Bank transfer instructions sent to your email"})
 
 @app.route("/paypal-ipn", methods=["POST"])
 def paypal_ipn():
@@ -320,7 +330,8 @@ def paypal_ipn():
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
-    print(f"🚀 Front-Tech server on port {port}")
-    print(f"📧 Email: {'✅ SendGrid' if SENDGRID_API_KEY else '❌ Not configured'}")
+    print(f"🚀 Front-Tech server starting on port {port}")
+    print(f"📧 Email: {'✅ Resend' if RESEND_API_KEY else '❌ Not configured'}")
     print(f"💰 PayPal: {'✅' if PAYPAL_EMAIL else '❌'} ({PAYPAL_MODE})")
+    print(f"📊 Dashboard: {DASHBOARD_URL}")
     app.run(host="0.0.0.0", port=port, debug=False)
