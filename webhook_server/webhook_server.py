@@ -1,12 +1,11 @@
 """
-Front-Tech Webhook Server (Flask + Resend Email)
+Front-Tech Landing Page + API Server (Flask + Resend)
+Railway-compatible version – March 2026
 """
 import os
 import json
 import random
 import string
-import urllib.request
-import urllib.parse
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -16,76 +15,52 @@ from resend import Resend
 load_dotenv()
 app = Flask(__name__)
 
-# Enable CORS for API endpoints (helps with frontend fetch issues)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+# Enable CORS – very important for fetch POST requests from the frontend
+CORS(app, supports_credentials=True, origins="*")
 
-# ── Configuration ──
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@front-tech.io")
-DASHBOARD_URL = os.getenv("STREAMLIT_URL", "https://your-streamlit.up.railway.app")  # ← change to your real Streamlit URL
-PAYPAL_EMAIL = os.getenv("PAYPAL_EMAIL", "")
-PAYPAL_MODE = os.getenv("PAYPAL_MODE", "sandbox")
-SECRET_KEY = os.getenv("SECRET_KEY", "change-this-secret-key-please")
-CLIENTS_FILE = "clients.json"
+# ── Config ────────────────────────────────────────────────────────────────
+RESEND_API_KEY   = os.getenv("RESEND_API_KEY", "")
+FROM_EMAIL       = os.getenv("FROM_EMAIL", "noreply@front-tech.io")
+DASHBOARD_URL    = os.getenv("STREAMLIT_URL", "https://your-dashboard.up.railway.app")
+PAYPAL_EMAIL     = os.getenv("PAYPAL_EMAIL", "")
+PAYPAL_MODE      = os.getenv("PAYPAL_MODE", "sandbox")
+SECRET_KEY       = os.getenv("SECRET_KEY", "change-this-in-production")
 
-# Bank details for manual transfer
-BANK_NAME = os.getenv("BANK_NAME", "Access Bank Botswana")
-BANK_ACCOUNT_NAME = os.getenv("BANK_ACCOUNT_NAME", "Front-Tech (PTY) Ltd")
-BANK_ACCOUNT_NUMBER = os.getenv("BANK_ACCOUNT_NUMBER", "1234567890")
-BANK_SWIFT_CODE = os.getenv("BANK_SWIFT_CODE", "ABBLBWGX")
-
-# PayPal config
-if PAYPAL_MODE == "sandbox":
-    PAYPAL_URL = "https://www.sandbox.paypal.com/cgi-bin/webscr"
-    IPN_VERIFY_URL = "https://ipnpb.sandbox.paypal.com/cgi-bin/webscr"
-else:
-    PAYPAL_URL = "https://www.paypal.com/cgi-bin/webscr"
-    IPN_VERIFY_URL = "https://ipnpb.paypal.com/cgi-bin/webscr"
-
-PLAN_PRICES = {"Starter": "49.00", "Pro": "149.00", "Enterprise": "299.00"}
+CLIENTS_FILE     = "clients.json"
+PLAN_PRICES      = {"Starter": 49.00, "Pro": 149.00, "Enterprise": 299.00}
 
 # Resend client
-resend_client = None
-if RESEND_API_KEY:
-    resend_client = Resend(RESEND_API_KEY)
+resend = Resend(RESEND_API_KEY) if RESEND_API_KEY else None
 
-# ── Landing page location ──
-def find_landing_page():
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.dirname(current_dir)
-    possible = [
-        os.path.join(parent_dir, 'landing', 'index.html'),
-        os.path.join(parent_dir, 'index.html'),
-        os.path.join(current_dir, 'landing', 'index.html'),
-        os.path.join(current_dir, 'index.html'),
+# ── Find landing page ─────────────────────────────────────────────────────
+def locate_landing_page():
+    base = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(base, '..', 'landing', 'index.html'),
+        os.path.join(base, 'landing', 'index.html'),
+        os.path.join(base, 'index.html'),
+        os.path.join(base, '..', 'index.html'),
     ]
-    for path in possible:
+    for path in candidates:
         if os.path.exists(path):
-            folder = os.path.dirname(path)
-            filename = os.path.basename(path)
-            if folder == parent_dir:
-                return '..', filename
-            elif 'landing' in folder:
-                return '../landing', filename
-            else:
-                return '.', filename
+            return os.path.dirname(path), os.path.basename(path)
     return None, None
 
-LANDING_PATH, INDEX_FILE = find_landing_page()
-print(f"📁 Landing path: {LANDING_PATH or 'NOT FOUND'}")
-print(f"📄 Index file: {INDEX_FILE or 'NOT FOUND'}")
+LANDING_DIR, INDEX_FILENAME = locate_landing_page()
+print(f"Landing dir : {LANDING_DIR or 'NOT FOUND'}")
+print(f"Index file  : {INDEX_FILENAME or 'NOT FOUND'}")
 
-# ── Email ──
-def send_email(to_email, subject, html_content):
-    if not resend_client:
-        print(f"[EMAIL SKIPPED] No Resend key → {to_email}")
+# ── Email ─────────────────────────────────────────────────────────────────
+def send_email(to_email: str, subject: str, html: str) -> bool:
+    if not resend:
+        print(f"[EMAIL SKIPPED] RESEND_API_KEY missing → {to_email}")
         return False
     try:
-        resend_client.Emails.send({
+        resend.Emails.send({
             "from": FROM_EMAIL,
             "to": to_email,
             "subject": subject,
-            "html": html_content
+            "html": html
         })
         print(f"[EMAIL SENT] → {to_email}")
         return True
@@ -93,114 +68,127 @@ def send_email(to_email, subject, html_content):
         print(f"[RESEND ERROR] {str(e)}")
         return False
 
-def send_welcome_email(to_email, name, username, password, plan, payment_method="paypal"):
-    html = f"""
-    <div style="font-family:sans-serif; max-width:560px; margin:0 auto; background:#04080f; color:#e8edf5; padding:40px; border-radius:12px;">
-      <h1 style="color:#fff">Welcome to <span style="color:#00e5a0">Front-Tech</span>!</h1>
-      <p>Hi <strong>{name}</strong>, your <strong>{plan}</strong> plan is active.</p>
-      <div style="background:#0e1a2e; border:1px solid #1a2640; border-radius:10px; padding:24px; margin:24px 0;">
-        <p><strong>Dashboard:</strong> <a href="{DASHBOARD_URL}" style="color:#00e5a0">{DASHBOARD_URL}</a></p>
-        <p><strong>Username:</strong> <code>{username}</code></p>
-        <p><strong>Password:</strong> <code>{password}</code></p>
-      </div>
-      <p>Payment: {payment_method.capitalize()}</p>
-      <a href="{DASHBOARD_URL}" style="display:inline-block; background:#00e5a0; color:#000; padding:14px 32px; border-radius:8px; text-decoration:none;">Open Dashboard</a>
-    </div>"""
-    send_email(to_email, f"Front-Tech – {plan} Plan Active", html)
+# ── Helpers ───────────────────────────────────────────────────────────────
+def generate_password(length: int = 10) -> str:
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choice(chars) for _ in range(length))
 
-# ── Helpers ──
-def generate_password(length=10):
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
-
-def load_clients():
+def load_clients() -> dict:
     if os.path.exists(CLIENTS_FILE):
-        with open(CLIENTS_FILE, 'r') as f:
-            return json.load(f)
+        try:
+            with open(CLIENTS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading clients.json: {e}")
     return {}
 
-def save_clients(clients):
-    with open(CLIENTS_FILE, 'w') as f:
-        json.dump(clients, f, indent=2)
-    print(f"[{datetime.now():%H:%M:%S}] Saved {len(clients)} clients")
+def save_clients(clients: dict):
+    try:
+        with open(CLIENTS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(clients, f, indent=2)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Saved {len(clients)} clients")
+    except Exception as e:
+        print(f"Error saving clients.json: {e}")
 
-def make_username(name, email):
-    base = ''.join(c for c in name.lower().replace(" ", "_") if c.isalnum() or c == '_') or email.split("@")[0]
+def make_username(name: str, email: str) -> str:
+    base = name.lower().replace(" ", "_")
+    base = "".join(c for c in base if c.isalnum() or c == "_") or email.split("@")[0]
     clients = load_clients()
-    u, i = base, 1
-    while u in clients:
-        u = f"{base}{i}"
+    uname, i = base, 1
+    while uname in clients:
+        uname = f"{base}{i}"
         i += 1
-    return u
+    return uname
 
-# ── Routes ──
+# ── Routes ────────────────────────────────────────────────────────────────
 @app.route('/')
 def serve_landing():
-    if not LANDING_PATH or not INDEX_FILE:
+    if not LANDING_DIR or not INDEX_FILENAME:
         return jsonify({"error": "Landing page not found"}), 404
-    return send_from_directory(LANDING_PATH, INDEX_FILE)
+    return send_from_directory(LANDING_DIR, INDEX_FILENAME)
 
 @app.route('/health')
 def health():
+    port = os.getenv("PORT", "unknown")
     return jsonify({
         "status": "ok",
-        "port": os.getenv("PORT", "unknown"),
-        "email": "Resend" if RESEND_API_KEY else "disabled",
-        "clients": len(load_clients())
+        "port": port,
+        "resend_active": bool(RESEND_API_KEY),
+        "clients_file_exists": os.path.exists(CLIENTS_FILE),
+        "clients_count": len(load_clients())
     })
+
+@app.route('/test')
+def test():
+    return "<h1>Backend is alive!</h1><p>Port: {}</p>".format(os.getenv("PORT", "unknown"))
 
 @app.route('/api/demo', methods=['POST'])
 def api_demo():
-    data = request.json or {}
-    name = data.get('name')
-    email = data.get('email')
-    if not name or not email:
-        return jsonify({"error": "Name and email required"}), 400
+    try:
+        data = request.get_json(silent=True) or {}
+        name  = data.get('name', '').strip()
+        email = data.get('email', '').strip()
 
-    clients = load_clients()
-    if any(info.get('email') == email for info in clients.values()):
-        return jsonify({"error": "Email already registered"}), 400
+        if not name or not email:
+            return jsonify({"error": "Name and email are required"}), 400
 
-    username = make_username(name, email)
-    password = generate_password(8)
+        clients = load_clients()
+        if any(v.get('email') == email for v in clients.values()):
+            return jsonify({"error": "Email already registered"}), 409
 
-    clients[username] = {
-        "name": name, "email": email, "plan": "Demo",
-        "status": "demo", "temp_password": password,
-        "created": datetime.now().isoformat()
-    }
-    save_clients(clients)
+        username = make_username(name, email)
+        password = generate_password(8)
 
-    html = f"""
-    <h2>Front-Tech Demo Ready</h2>
-    <p>Hello {name},</p>
-    <p><strong>Dashboard:</strong> {DASHBOARD_URL}</p>
-    <p><strong>Username:</strong> {username}</p>
-    <p><strong>Password:</strong> {password}</p>
-    <p>Valid for 7 days.</p>"""
-    send_email(email, "Your Front-Tech Demo Access", html)
+        clients[username] = {
+            "name": name,
+            "email": email,
+            "plan": "Demo",
+            "status": "demo",
+            "password": password,  # plain for MVP – hash in production
+            "created": datetime.now().isoformat()
+        }
+        save_clients(clients)
 
-    return jsonify({"success": True})
+        html = f"""
+        <h2>Front-Tech Demo Access</h2>
+        <p>Hi {name},</p>
+        <p><strong>Dashboard:</strong> <a href="{DASHBOARD_URL}">{DASHBOARD_URL}</a></p>
+        <p><strong>Username:</strong> {username}</p>
+        <p><strong>Password:</strong> {password}</p>
+        <p>This demo expires in 7 days.</p>
+        """
+        send_email(email, "Your Front-Tech Demo is Ready", html)
+
+        return jsonify({"success": True, "message": "Demo credentials sent to your email"})
+    except Exception as e:
+        print(f"[DEMO ERROR] {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/api/signup', methods=['POST'])
 def api_signup():
-    data = request.json or {}
-    name = data.get('name')
-    email = data.get('email')
-    plan = data.get('plan', 'Starter')
-    method = data.get('payment_method', 'paypal')
+    try:
+        data = request.get_json(silent=True) or {}
+        name  = data.get('name', '').strip()
+        email = data.get('email', '').strip()
+        plan  = data.get('plan', 'Starter')
 
-    if plan not in PLAN_PRICES:
-        return jsonify({"error": "Invalid plan"}), 400
+        if not name or not email:
+            return jsonify({"error": "Name and email required"}), 400
 
-    # ... (rest of signup logic – PayPal redirect, pending status, etc.)
-    # For brevity – keep your existing code here
+        if plan not in PLAN_PRICES:
+            return jsonify({"error": "Invalid plan"}), 400
 
-    return jsonify({"message": "Signup received – payment flow starts"})
-
-# Add your other routes (/api/login, /api/request-bank-transfer, /paypal-ipn) here
-# They remain the same as in previous versions
+        # For MVP: just acknowledge – real payment flow can be added later
+        return jsonify({
+            "success": True,
+            "message": f"Signup for {plan} received – payment flow would start here",
+            "price": PLAN_PRICES[plan]
+        })
+    except Exception as e:
+        print(f"[SIGNUP ERROR] {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8080))
-    print(f"Starting on 0.0.0.0:{port}")
-    app.run(host="0.0.0.0", port=port, debug=False)
+    port = int(os.getenv("PORT") or 8080)
+    print(f"Starting server → http://0.0.0.0:{port}  (Railway PORT = {os.getenv('PORT')})")
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
