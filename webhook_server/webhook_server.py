@@ -1,29 +1,24 @@
 """
-Front-Tech — Complete Webhook Server
+Front-Tech — Webhook Server with SendGrid Email
 """
 
 import os
 import json
 import random
 import string
-import smtplib
 import urllib.request
 import urllib.parse
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
 app = Flask(__name__)
 
 # ── Configuration ──
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
-FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USER)
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@front-tech.io")
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "https://your-streamlit.streamlit.app")
 PAYPAL_EMAIL = os.getenv("PAYPAL_EMAIL", "")
 PAYPAL_MODE = os.getenv("PAYPAL_MODE", "sandbox")
@@ -40,11 +35,9 @@ BANK_SWIFT_CODE = os.getenv("BANK_SWIFT_CODE", "ABBLBWGX")
 if PAYPAL_MODE == "sandbox":
     PAYPAL_URL = "https://www.sandbox.paypal.com/cgi-bin/webscr"
     IPN_VERIFY_URL = "https://ipnpb.sandbox.paypal.com/cgi-bin/webscr"
-    print("🔧 PayPal Mode: SANDBOX")
 else:
     PAYPAL_URL = "https://www.paypal.com/cgi-bin/webscr"
     IPN_VERIFY_URL = "https://ipnpb.paypal.com/cgi-bin/webscr"
-    print("💰 PayPal Mode: LIVE")
 
 PLAN_PRICES = {"Starter": "49.00", "Pro": "149.00", "Enterprise": "299.00"}
 
@@ -66,7 +59,6 @@ def find_landing_page():
         if os.path.exists(path):
             folder = os.path.dirname(path)
             filename = os.path.basename(path)
-            # Return relative path from webhook_server folder
             if folder == parent_dir:
                 return '..', filename
             elif folder == os.path.join(parent_dir, 'landing'):
@@ -81,6 +73,54 @@ def find_landing_page():
 LANDING_PATH, INDEX_FILE = find_landing_page()
 print(f"📁 Landing path: {LANDING_PATH}")
 print(f"📄 Index file: {INDEX_FILE}")
+
+# ========== EMAIL FUNCTIONS (SendGrid) ==========
+
+def send_email(to_email, subject, html_content):
+    """Send email using SendGrid API"""
+    if not SENDGRID_API_KEY:
+        print(f"[EMAIL SKIPPED] No API key. Would send to {to_email}")
+        return False
+    
+    try:
+        response = requests.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={
+                "Authorization": f"Bearer {SENDGRID_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "personalizations": [{"to": [{"email": to_email}]}],
+                "from": {"email": FROM_EMAIL, "name": "Front-Tech"},
+                "subject": subject,
+                "content": [{"type": "text/html", "value": html_content}]
+            }
+        )
+        if response.status_code == 202:
+            print(f"[EMAIL SENT] → {to_email}")
+            return True
+        else:
+            print(f"[EMAIL ERROR] {response.status_code}: {response.text}")
+            return False
+    except Exception as e:
+        print(f"[EMAIL ERROR] {e}")
+        return False
+
+def send_welcome_email(to_email, name, username, password, plan, payment_method="paypal"):
+    """Send welcome email"""
+    html = f"""
+    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#04080f;color:#e8edf5;padding:40px;border-radius:12px">
+      <h1 style="color:#fff">Welcome to <span style="color:#00e5a0">Front-Tech</span>! 🎉</h1>
+      <p>Hi <strong>{name}</strong>, your <strong>{plan}</strong> plan is active.</p>
+      <div style="background:#0e1a2e;border:1px solid #1a2640;border-radius:10px;padding:24px;margin:24px 0">
+        <p><strong>URL:</strong> <a href="{DASHBOARD_URL}" style="color:#00e5a0">{DASHBOARD_URL}</a></p>
+        <p><strong>Username:</strong> <code>{username}</code></p>
+        <p><strong>Password:</strong> <code>{password}</code></p>
+      </div>
+      <p>Payment Method: {payment_method}</p>
+      <a href="{DASHBOARD_URL}" style="display:inline-block;background:#00e5a0;color:#000;padding:14px 32px;border-radius:8px;text-decoration:none">Launch Dashboard →</a>
+    </div>"""
+    return send_email(to_email, f"Welcome to Front-Tech — Your {plan} Plan", html)
 
 # ========== HELPER FUNCTIONS ==========
 
@@ -104,41 +144,6 @@ def make_username(name, email):
     while u in clients:
         u, i = f"{base}{i}", i + 1
     return u
-
-def send_email(to_email, subject, html_content):
-    if not SMTP_USER or not SMTP_PASS:
-        print(f"[EMAIL SKIPPED] Would send to {to_email}")
-        return False
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"Front-Tech <{FROM_EMAIL}>"
-        msg["To"] = to_email
-        msg.attach(MIMEText(html_content, "html"))
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
-        print(f"[EMAIL SENT] → {to_email}")
-        return True
-    except Exception as e:
-        print(f"[EMAIL ERROR] {e}")
-        return False
-
-def send_welcome_email(to_email, name, username, password, plan, payment_method="paypal"):
-    html = f"""
-    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#04080f;color:#e8edf5;padding:40px;border-radius:12px">
-      <h1 style="color:#fff">Welcome to <span style="color:#00e5a0">Front-Tech</span>! 🎉</h1>
-      <p>Hi <strong>{name}</strong>, your <strong>{plan}</strong> plan is active.</p>
-      <div style="background:#0e1a2e;border:1px solid #1a2640;border-radius:10px;padding:24px;margin:24px 0">
-        <p><strong>URL:</strong> <a href="{DASHBOARD_URL}" style="color:#00e5a0">{DASHBOARD_URL}</a></p>
-        <p><strong>Username:</strong> <code>{username}</code></p>
-        <p><strong>Password:</strong> <code>{password}</code></p>
-      </div>
-      <p>Payment Method: {payment_method}</p>
-      <a href="{DASHBOARD_URL}" style="display:inline-block;background:#00e5a0;color:#000;padding:14px 32px;border-radius:8px;text-decoration:none">Launch Dashboard →</a>
-    </div>"""
-    return send_email(to_email, f"Welcome to Front-Tech — Your {plan} Plan", html)
 
 def provision_client(name, email, plan, amount="", payment_method="paypal"):
     clients = load_clients()
@@ -170,7 +175,12 @@ def test_page():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "clients": len(load_clients()), "paypal_mode": PAYPAL_MODE})
+    return jsonify({
+        "status": "ok", 
+        "clients": len(load_clients()), 
+        "paypal_mode": PAYPAL_MODE,
+        "email_configured": bool(SENDGRID_API_KEY)
+    })
 
 @app.route('/api/demo', methods=['POST'])
 def api_demo():
@@ -200,7 +210,8 @@ def api_demo():
     <p><strong>URL:</strong> {DASHBOARD_URL}</p>
     <p><strong>Username:</strong> {username}</p>
     <p><strong>Password:</strong> {demo_password}</p>
-    <p>This demo expires in 7 days.</p>"""
+    <p>This demo expires in 7 days.</p>
+    <p>To upgrade, visit our website and choose a plan.</p>"""
     
     send_email(email, "Your Front-Tech Demo Access", demo_html)
     return jsonify({"success": True, "message": "Demo credentials sent to your email"})
@@ -218,7 +229,6 @@ def api_signup():
     
     price = PLAN_PRICES.get(plan)
     
-    # Create pending user
     clients = load_clients()
     username = make_username(name, email)
     temp_password = generate_password()
@@ -230,9 +240,8 @@ def api_signup():
     }
     save_clients(clients)
     
-    # Check if PayPal email is configured
     if not PAYPAL_EMAIL:
-        return jsonify({"error": "PayPal is not configured. Please use bank transfer."}), 400
+        return jsonify({"error": "PayPal not configured. Please use bank transfer."}), 400
     
     paypal_url = f"{PAYPAL_URL}?cmd=_xclick&business={PAYPAL_EMAIL}&item_name={plan} Plan&amount={price}&currency_code=USD&notify_url={request.host_url}paypal-ipn&return_url={request.host_url}?payment=success"
     
@@ -260,6 +269,7 @@ def request_bank_transfer():
     email = data.get('email')
     plan = data.get('plan')
     price = PLAN_PRICES.get(plan, "49.00")
+    bwp_amount = float(price) * 13.5
     
     bank_html = f"""
     <h2>Bank Transfer Instructions</h2>
@@ -268,8 +278,8 @@ def request_bank_transfer():
     <p><strong>Account Name:</strong> {BANK_ACCOUNT_NAME}</p>
     <p><strong>Account Number:</strong> {BANK_ACCOUNT_NUMBER}</p>
     <p><strong>SWIFT:</strong> {BANK_SWIFT_CODE}</p>
-    <p><strong>Amount:</strong> ${price}</p>
-    <p><strong>Reference:</strong> CHURN-{plan[:3]}</p>
+    <p><strong>Amount:</strong> BWP {bwp_amount:.2f} (USD ${price})</p>
+    <p><strong>Reference:</strong> CHURN-{plan[:3]}-{name[:5].upper()}</p>
     <p>We'll activate your account within 24 hours.</p>"""
     
     send_email(email, f"Bank Transfer Instructions - {plan} Plan", bank_html)
@@ -311,6 +321,6 @@ def paypal_ipn():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
     print(f"🚀 Front-Tech server on port {port}")
-    print(f"📧 Email: {'✅' if SMTP_USER else '❌'}")
+    print(f"📧 Email: {'✅ SendGrid' if SENDGRID_API_KEY else '❌ Not configured'}")
     print(f"💰 PayPal: {'✅' if PAYPAL_EMAIL else '❌'} ({PAYPAL_MODE})")
     app.run(host="0.0.0.0", port=port, debug=False)
